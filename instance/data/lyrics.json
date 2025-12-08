@@ -1,0 +1,110 @@
+[
+  {
+    "id": 0,
+    "lyric": "Think of me, think of me fondly when we've said goodbye - The Phantom of the Opera",
+    "love": 2,
+    "dislike": 0
+  },
+  {
+    "id": 1,
+    "lyric": "Do you hear the people sing? Singing the song of angry men - Les Misérables",
+    "love": 1,
+    "dislike": 1
+  },
+  {
+    "id": 2,
+    "lyric": "He had it coming, he had it coming, he only had himself to blame - Chicago",
+    "love": 0,
+    "dislike": 0
+  },
+  {
+    "id": 3,
+    "lyric": "Memory, all alone in the moonlight, I can smile at the old days - Cats",
+    "love": 1,
+    "dislike": 1
+  },
+  {
+    "id": 4,
+    "lyric": "Defying gravity, I'm flying high, defying gravity - Wicked",
+    "love": 2,
+    "dislike": 0
+  },
+  {
+    "id": 5,
+    "lyric": "Can you feel the love tonight? The peace the evening brings - The Lion King",
+    "love": 0,
+    "dislike": 1
+  },
+  {
+    "id": 6,
+    "lyric": "Let it go, let it go, can't hold it back anymore - Frozen",
+    "love": 1,
+    "dislike": 0
+  },
+  {
+    "id": 7,
+    "lyric": "A whole new world, a new fantastic point of view - Aladdin",
+    "love": 1,
+    "dislike": 1
+  },
+  {
+    "id": 8,
+    "lyric": "Come what may, I will love you until my dying day - Moulin Rouge!",
+    "love": 1,
+    "dislike": 0
+  },
+  {
+    "id": 9,
+    "lyric": "I don't have to be sorry for anything, I'm just a girl who's had enough - Six",
+    "love": 0,
+    "dislike": 0
+  },
+  {
+    "id": 10,
+    "lyric": "You will be found, even when the dark comes crashing through - Dear Evan Hansen",
+    "love": 1,
+    "dislike": 1
+  },
+  {
+    "id": 11,
+    "lyric": "I am not throwing away my shot, I am not throwing away my shot - Hamilton",
+    "love": 2,
+    "dislike": 0
+  },
+  {
+    "id": 12,
+    "lyric": "Hello! My name is Elder Price, and I would like to share with you - Book of Mormon",
+    "love": 0,
+    "dislike": 0
+  },
+  {
+    "id": 13,
+    "lyric": "You are here, that's how it's become so clear - Come From Away",
+    "love": 0,
+    "dislike": 0
+  },
+  {
+    "id": 14,
+    "lyric": "Wait for me, I'm coming, wait I'm coming with you - Hadestown",
+    "love": 0,
+    "dislike": 1
+  },
+  {
+    "id": 15,
+    "lyric": "All I ask of you is one thing, please don't be sorry - Mean Girls",
+    "love": 0,
+    "dislike": 0
+  },
+  {
+    "id": 16,
+    "lyric": "Music of the night, close your eyes and surrender to your darkest dreams - The Phantom of the Opera",
+    "love": 0,
+    "dislike": 0
+  },
+  {
+    "id": 17,
+    "lyric": "On my own, pretending he's beside me, all alone I walk with him - Les Misérables",
+    "love": 1,
+    "dislike": 0
+  }
+]
