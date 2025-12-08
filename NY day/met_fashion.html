@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MET Fashion Scraper</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .controls {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input, select, button {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background: #5a67d8;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn-group button {
+            flex: 1;
+        }
+        
+        .outfits-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .outfit-card {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        
+        .outfit-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .outfit-image {
+            width: 100%;
+            height: 250px;
+            object-fit: cover;
+        }
+        
+        .outfit-content {
+            padding: 20px;
+        }
+        
+        .outfit-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .outfit-details {
+            color: #666;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+        
+        .outfit-description {
+            color: #777;
+            font-size: 14px;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            background: #efe;
+            color: #393;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .view-link {
+            display: inline-block;
+            margin-top: 10px;
+            color: #667eea;
+            text-decoration: none;
+        }
+        
+        .view-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>👗 MET Museum Fashion Scraper</h1>
+            <p>Browse historical fashion from The Metropolitan Museum of Art</p>
+        </div>
+        
+        <div class="controls">
+            <h2>Search & Scrape</h2>
+            
+            <div class="form-group">
+                <label for="searchQuery">Search for fashion items:</label>
+                <input type="text" id="searchQuery" placeholder="e.g., dress, gown, costume, fashion" value="dress">
+            </div>
+            
+            <div class="btn-group">
+                <button onclick="searchFashion()" id="searchBtn">🔍 Search MET Collection</button>
+                <button onclick="scrapeFashion()" id="scrapeBtn">✨ Scrape Fashion Items</button>
+                <button onclick="clearResults()" id="clearBtn">🗑️ Clear Results</button>
+            </div>
+            
+            <div id="message"></div>
+        </div>
+        
+        <div id="results">
+            <h2>Fashion Items</h2>
+            <div id="outfitsContainer" class="outfits-grid">
+                <!-- Outfits will be loaded here -->
+                <div class="loading" id="loadingMessage">
+                    Click "Search MET Collection" or "Scrape Fashion Items" to begin
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import our scraper module -->
+    <script type="module">
+        import MetScraper from './assets/js/met_scraper.js';
+        
+        // Create global scraper instance
+        window.metScraper = new MetScraper();
+        
+        // UI Functions
+        window.searchFashion = async function() {
+            const query = document.getElementById('searchQuery').value || 'dress';
+            const searchBtn = document.getElementById('searchBtn');
+            const message = document.getElementById('message');
+            const container = document.getElementById('outfitsContainer');
+            
+            // Show loading
+            searchBtn.disabled = true;
+            searchBtn.textContent = 'Searching...';
+            message.innerHTML = '<div class="loading">Searching MET Museum for fashion items...</div>';
+            container.innerHTML = '<div class="loading">Loading fashion items...</div>';
+            
+            try {
+                // Search for outfits
+                const outfits = await metScraper.searchOutfits(query, 12);
+                
+                // Display results
+                displayOutfits(outfits);
+                
+                // Show message
+                message.innerHTML = `<div class="success">Found ${outfits.length} fashion items for "${query}"</div>`;
+                
+            } catch (error) {
+                message.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+                console.error('Search error:', error);
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = '🔍 Search MET Collection';
+            }
+        };
+        
+        window.scrapeFashion = async function() {
+            const scrapeBtn = document.getElementById('scrapeBtn');
+            const message = document.getElementById('message');
+            const container = document.getElementById('outfitsContainer');
+            
+            // Show loading
+            scrapeBtn.disabled = true;
+            scrapeBtn.textContent = 'Scraping...';
+            message.innerHTML = '<div class="loading">Scraping fashion items from MET Museum... This may take a moment.</div>';
+            container.innerHTML = '<div class="loading">Scraping fashion items...</div>';
+            
+            try {
+                // Scrape fashion items
+                const outfits = await metScraper.scrapeFashionItems(12);
+                
+                // Display results
+                displayOutfits(outfits);
+                
+                // Show message
+                message.innerHTML = `<div class="success">Scraped ${outfits.length} fashion items from MET Museum</div>`;
+                
+            } catch (error) {
+                message.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+                console.error('Scrape error:', error);
+            } finally {
+                scrapeBtn.disabled = false;
+                scrapeBtn.textContent = '✨ Scrape Fashion Items';
+            }
+        };
+        
+        window.clearResults = function() {
+            const container = document.getElementById('outfitsContainer');
+            const message = document.getElementById('message');
+            
+            container.innerHTML = '<div class="loading">Click "Search MET Collection" or "Scrape Fashion Items" to begin</div>';
+            message.innerHTML = '';
+        };
+        
+        function displayOutfits(outfits) {
+            const container = document.getElementById('outfitsContainer');
+            
+            if (!outfits || outfits.length === 0) {
+                container.innerHTML = '<div class="error">No fashion items found. Try a different search term.</div>';
+                return;
+            }
+            
+            container.innerHTML = outfits.map(outfit => `
+                <div class="outfit-card">
+                    ${outfit.image_url ? `
+                        <img src="${outfit.image_url}" alt="${outfit.title}" class="outfit-image" 
+                             onerror="this.src='https://via.placeholder.com/300x250/cccccc/969696?text=No+Image'">
+                    ` : `
+                        <div class="outfit-image" style="background: #f0f0f0; display: flex; align-items: center; justify-content: center; color: #999;">
+                            No Image Available
+                        </div>
+                    `}
+                    
+                    <div class="outfit-content">
+                        <div class="outfit-title">${outfit.title}</div>
+                        
+                        <div class="outfit-details">
+                            ${outfit.artist ? `<div><strong>Artist:</strong> ${outfit.artist}</div>` : ''}
+                            ${outfit.date ? `<div><strong>Date:</strong> ${outfit.date}</div>` : ''}
+                            ${outfit.culture ? `<div><strong>Culture:</strong> ${outfit.culture}</div>` : ''}
+                            ${outfit.period ? `<div><strong>Period:</strong> ${outfit.period}</div>` : ''}
+                        </div>
+                        
+                        ${outfit.description ? `
+                            <div class="outfit-description">
+                                ${outfit.description.length > 150 ? 
+                                    outfit.description.substring(0, 150) + '...' : 
+                                    outfit.description}
+                            </div>
+                        ` : ''}
+                        
+                        ${outfit.met_url ? `
+                            <a href="${outfit.met_url}" target="_blank" class="view-link">
+                                View on MET Museum →
+                            </a>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Initialize with some outfits
+        window.onload = function() {
+            // Optional: Load some default outfits on page load
+            // searchFashion();
+        };
+    </script>
+<!-- Add this button to the .btn-group section -->
+<button onclick="saveToFlask()" id="saveBtn">💾 Save to My Collection</button>
+
+<!-- Add this function to the script -->
+<script type="module">
+    import FlaskConnector from './assets/js/flask_connector.js';
+    
+    // Create Flask connector
+    window.flaskConnector = new FlaskConnector();
+    
+    // Function to save current outfits to Flask
+    window.saveToFlask = async function() {
+        const saveBtn = document.getElementById('saveBtn');
+        const message = document.getElementById('message');
+        
+        // Get current displayed outfits
+        const outfitCards = document.querySelectorAll('.outfit-card');
+        if (outfitCards.length === 0) {
+            message.innerHTML = '<div class="error">No outfits to save. Search or scrape first.</div>';
+            return;
+        }
+        
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+        message.innerHTML = '<div class="loading">Saving outfits to your collection...</div>';
+        
+        try {
+            // Extract outfit data from current display
+            // This would need to be stored in a variable when scraping
+            // For now, we'll use a simplified approach
+            const currentOutfits = window.currentOutfits || [];
+            
+            if (currentOutfits.length === 0) {
+                message.innerHTML = '<div class="error">No outfit data available to save.</div>';
+                return;
+            }
+            
+            // Save each outfit to Flask
+            let savedCount = 0;
+            for (const outfit of currentOutfits) {
+                const result = await flaskConnector.saveOutfitToBackend(outfit);
+                if (result) savedCount++;
+            }
+            
+            message.innerHTML = `<div class="success">Saved ${savedCount} outfits to your collection!</div>`;
+            
+        } catch (error) {
+            message.innerHTML = `<div class="error">Error saving: ${error.message}</div>`;
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = '💾 Save to My Collection';
+        }
+    };
+    
+    // Update the displayOutfits function to store current outfits
+    const originalDisplayOutfits = window.displayOutfits;
+    window.displayOutfits = function(outfits) {
+        window.currentOutfits = outfits; // Store for saving
+        originalDisplayOutfits(outfits);
+    };
+</script>
+</body>
+</html>
