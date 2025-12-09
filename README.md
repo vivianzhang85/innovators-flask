@@ -55,13 +55,13 @@ pip install -r requirements.txt
     - Shourd be ./venv/bin/python
 
   - From Extensions Marketplace install `SQLite3 Editor`
-    - Open and view SQL database file `instance/volumes/user_management.db`
+    - Open and view SQL database file `instance/volumes/.db`
 
   - Make a local `.env` file in root of project to contain your secret passwords
 
   ```shell
   # Port configuration
-  FLASK_PORT=8001
+  FLASK_PORT=8587
   # Admin user reset password 
   DEFAULT_PASSWORD='123Qwerty!'
   # Admin user defaults
@@ -98,7 +98,7 @@ pip install -r requirements.txt
 
   - Explore newly created SQL database
     - Navigate too instance/volumes
-    - View/open `user_management.db`
+    - View/open `.db`
     - Loook at `users` table in viewer
 
   - Run the Project
