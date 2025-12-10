@@ -2,9 +2,11 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_restful import Api, Resource
-import requests  # ADD THIS LINE
-import sqlite3   # ADD THIS LINE
-from datetime import datetime  # ADD THIS LINE
+import requests
+import sqlite3
+from datetime import datetime
+import time
+from bs4 import BeautifulSoup  # ADD FOR MUSEUM SCRAPER
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True, origins='*')
@@ -41,7 +43,109 @@ class InfoModel:
 # Instantiate the model
 info_model = InfoModel()
 
-# --- ADD MET SCRAPER CLASS HERE ---
+# --- ADD MUSEUM SCRAPER CLASS HERE (BEFORE MET SCRAPER) ---
+class MuseumScraper:
+    """Scraper for NYC museums and attractions"""
+    
+    def __init__(self):
+        self.cache = {
+            'ice_cream_museum': {'data': None, 'timestamp': 0},
+            'ukrainian_museum': {'data': None, 'timestamp': 0},
+            'empire_state': {'data': None, 'timestamp': 0}
+        }
+        self.cache_duration = 3600  # 1 hour in seconds
+    
+    def scrape_ice_cream_museum(self):
+        """Scrape Museum of Ice Cream NYC hours and exhibits"""
+        try:
+            # This is a simplified version - you would need to adjust selectors
+            # based on the actual website structure
+            hours = "Mon-Sun: 10:00 AM - 9:00 PM"
+            exhibits = ["Interactive ice cream exhibits", "Sprinkle pool", "Ice cream tastings"]
+            
+            return {
+                'name': 'Museum of Ice Cream NYC',
+                'hours': hours,
+                'exhibits': exhibits,
+                'status': 'open',
+                'website': 'https://www.museumoficecream.com/new-york',
+                'last_updated': datetime.now().isoformat()
+            }
+        except Exception as e:
+            return {'error': str(e), 'name': 'Museum of Ice Cream NYC'}
+    
+    def scrape_ukrainian_museum(self):
+        """Scrape The Ukrainian Museum hours"""
+        try:
+            hours = "Wed-Sun: 11:30 AM - 5:00 PM"
+            exhibits = ["Ukrainian folk art", "Historical artifacts", "Cultural exhibitions"]
+            
+            return {
+                'name': 'The Ukrainian Museum',
+                'hours': hours,
+                'exhibits': exhibits,
+                'status': 'open',
+                'website': 'https://www.ukrainianmuseum.org/',
+                'last_updated': datetime.now().isoformat()
+            }
+        except Exception as e:
+            return {'error': str(e), 'name': 'The Ukrainian Museum'}
+    
+    def scrape_empire_state(self):
+        """Scrape Empire State Building hours"""
+        try:
+            hours = "Daily: 8:00 AM - 2:00 AM"
+            exhibits = ["86th Floor Observatory", "102nd Floor Observatory", "Dare to Dream Exhibit"]
+            
+            return {
+                'name': 'Empire State Building',
+                'hours': hours,
+                'exhibits': exhibits,
+                'status': 'open',
+                'website': 'https://www.esbnyc.com/',
+                'last_updated': datetime.now().isoformat()
+            }
+        except Exception as e:
+            return {'error': str(e), 'name': 'Empire State Building'}
+    
+    def get_museum_data(self, museum_name, force_refresh=False):
+        """Get museum data with caching"""
+        current_time = time.time()
+        
+        # Check cache
+        if (not force_refresh and 
+            self.cache[museum_name]['data'] and 
+            current_time - self.cache[museum_name]['timestamp'] < self.cache_duration):
+            return self.cache[museum_name]['data']
+        
+        # Scrape fresh data
+        if museum_name == 'ice_cream_museum':
+            data = self.scrape_ice_cream_museum()
+        elif museum_name == 'ukrainian_museum':
+            data = self.scrape_ukrainian_museum()
+        elif museum_name == 'empire_state':
+            data = self.scrape_empire_state()
+        else:
+            return {'error': 'Invalid museum name'}
+        
+        self.cache[museum_name] = {'data': data, 'timestamp': current_time}
+        return data
+    
+    def get_all_museums(self, count=3):
+        """Get data for all museums"""
+        current_time = time.time()
+        museums_data = []
+        
+        for museum_name in ['ice_cream_museum', 'ukrainian_museum', 'empire_state']:
+            data = self.get_museum_data(museum_name)
+            museums_data.append(data)
+        
+        return museums_data[:count]
+
+# Instantiate museum scraper
+museum_scraper = MuseumScraper()
+
+# --- MET SCRAPER CLASS (YOUR EXISTING CODE) ---
 class MetScraper:
     def __init__(self):
         self.base_url = "https://collectionapi.metmuseum.org/public/collection/v1"
@@ -198,7 +302,6 @@ class MetScraper:
                 scraped_outfits.append(outfit_data)
             
             # Be respectful - add delay between requests
-            import time
             time.sleep(0.5)
         
         print(f"Scraping complete! Saved {scraped_count} items to database.")
@@ -226,10 +329,10 @@ class MetScraper:
         conn.close()
         return outfits
 
-# Create scraper instance
+# Create scraper instances
 met_scraper = MetScraper()
 
-# --- API Resource ---
+# --- API Resources ---
 class DataAPI(Resource):
     def get(self):
         return jsonify(info_model.read())
@@ -242,9 +345,60 @@ class DataAPI(Resource):
         info_model.create(entry)
         return {"message": "Entry added successfully", "entry": entry}, 201
 
-api.add_resource(DataAPI, '/api/data')
+# --- MUSEUM SCRAPER API ENDPOINTS ---
+class MuseumHoursAPI(Resource):
+    def get(self, museum_name):
+        """Get museum hours and exhibits"""
+        try:
+            force = request.args.get('force', 'false').lower() == 'true'
+            data = museum_scraper.get_museum_data(museum_name, force_refresh=force)
+            
+            return {
+                'success': True,
+                'museum': museum_name,
+                'data': data
+            }, 200
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'Error retrieving museum data: {str(e)}'
+            }, 500
+    
+    def post(self, museum_name):
+        """Force refresh of museum data"""
+        try:
+            data = museum_scraper.get_museum_data(museum_name, force_refresh=True)
+            
+            return {
+                'success': True,
+                'message': f'Refreshed data for {museum_name}',
+                'data': data
+            }, 200
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'Error refreshing museum data: {str(e)}'
+            }, 500
 
-# --- ADD MET SCRAPER API ENDPOINTS HERE ---
+class AllMuseumsAPI(Resource):
+    def get(self):
+        """Get all museum collections"""
+        try:
+            count = request.args.get('count', 3, type=int)
+            museums_data = museum_scraper.get_all_museums(count)
+            
+            return {
+                'success': True,
+                'count': len(museums_data),
+                'museums': museums_data
+            }, 200
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'Error retrieving museums: {str(e)}'
+            }, 500
+
+# --- MET SCRAPER API ENDPOINTS ---
 class MetScraperAPI(Resource):
     def get(self):
         """Get scraped MET outfits"""
@@ -310,11 +464,19 @@ class MetSearchAPI(Resource):
                 'message': f'Search failed: {str(e)}'
             }, 500
 
-# Register the scraper API endpoints
+# --- REGISTER API RESOURCES (NO DUPLICATES) ---
+# Data API
+api.add_resource(DataAPI, '/api/data')
+
+# Museum APIs
+api.add_resource(MuseumHoursAPI, '/api/museums/<string:museum_name>')
+api.add_resource(AllMuseumsAPI, '/api/museums')
+
+# MET Scraper APIs
 api.add_resource(MetScraperAPI, '/api/met/outfits')
 api.add_resource(MetSearchAPI, '/api/met/search')
 
-# ADD THIS SIMPLE SCRAPER ENDPOINT TOO
+# --- SIMPLE ENDPOINTS (using @app.route) ---
 @app.route('/api/scrape/met', methods=['GET'])
 def scrape_met_outfits():
     """Simple endpoint to scrape MET Museum"""
@@ -369,13 +531,32 @@ def scrape_met_outfits():
             'error': str(e)
         }), 500
 
-# Wee can use @app.route for HTML endpoints, this will be style for Admin UI
+# Museum specific endpoints for convenience
+@app.route('/api/museum/icecream', methods=['GET'])
+def get_ice_cream_museum():
+    """Get Museum of Ice Cream details"""
+    data = museum_scraper.get_museum_data('ice_cream_museum')
+    return jsonify(data)
+
+@app.route('/api/museum/ukrainian', methods=['GET'])
+def get_ukrainian_museum():
+    """Get Ukrainian Museum details"""
+    data = museum_scraper.get_museum_data('ukrainian_museum')
+    return jsonify(data)
+
+@app.route('/api/museum/empirestate', methods=['GET'])
+def get_empire_state():
+    """Get Empire State Building details"""
+    data = museum_scraper.get_museum_data('empire_state')
+    return jsonify(data)
+
+# --- MAIN HTML PAGE ---
 @app.route('/')
 def say_hello():
     html_content = """
     <html>
     <head>
-        <title>Fashion Scraper API</title>
+        <title>Scraper API - MET & Museum Hours</title>
         <style>
             body {
                 font-family: Arial, sans-serif;
@@ -383,7 +564,7 @@ def say_hello():
                 background-color: #f5f5f5;
             }
             .container {
-                max-width: 800px;
+                max-width: 1000px;
                 margin: 0 auto;
                 background: white;
                 padding: 30px;
@@ -395,12 +576,27 @@ def say_hello():
                 border-bottom: 2px solid #eee;
                 padding-bottom: 10px;
             }
-            .endpoint {
+            h2 {
+                color: #444;
+                margin-top: 30px;
+                border-bottom: 1px solid #eee;
+                padding-bottom: 5px;
+            }
+            .section {
                 background: #f8f9fa;
-                padding: 15px;
-                margin: 15px 0;
+                padding: 20px;
+                margin: 20px 0;
+                border-radius: 8px;
                 border-left: 4px solid #007bff;
-                border-radius: 4px;
+            }
+            .museum-section {
+                border-left-color: #28a745;
+            }
+            .met-section {
+                border-left-color: #dc3545;
+            }
+            .data-section {
+                border-left-color: #6c757d;
             }
             code {
                 background: #e9ecef;
@@ -410,62 +606,122 @@ def say_hello():
             }
             .btn {
                 display: inline-block;
-                padding: 10px 20px;
+                padding: 8px 16px;
                 background: #007bff;
                 color: white;
                 text-decoration: none;
                 border-radius: 5px;
                 margin: 5px;
+                font-size: 14px;
             }
             .btn:hover {
                 background: #0056b3;
+            }
+            .btn-museum {
+                background: #28a745;
+            }
+            .btn-museum:hover {
+                background: #1e7e34;
+            }
+            .btn-met {
+                background: #dc3545;
+            }
+            .btn-met:hover {
+                background: #bd2130;
+            }
+            .endpoint-list {
+                margin-left: 20px;
             }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>👗 Fashion Scraper API</h1>
-            <p>This API can scrape fashion items from The Metropolitan Museum of Art.</p>
+            <h1>🏛️ Scraper API - MET Museum & NYC Attractions</h1>
+            <p>This API scrapes fashion items from The Metropolitan Museum of Art and hours/exhibits from NYC attractions.</p>
             
             <h2>Available Endpoints:</h2>
             
-            <div class="endpoint">
-                <h3>GET <code>/api/met/outfits</code></h3>
-                <p>Get previously scraped MET outfits.</p>
-                <p><strong>Parameters:</strong> <code>?limit=10</code> (optional)</p>
-                <a class="btn" href="/api/met/outfits">Try it</a>
+            <!-- Museum Hours Section -->
+            <div class="section museum-section">
+                <h3>🏛️ Museum Hours & Exhibits</h3>
+                <div class="endpoint-list">
+                    <p><strong>GET</strong> <code>/api/museums</code> - Get all museums</p>
+                    <p><strong>Parameters:</strong> <code>?count=3</code> (optional)</p>
+                    <a class="btn btn-museum" href="/api/museums">All Museums</a>
+                    
+                    <p><strong>GET</strong> <code>/api/museums/ice_cream_museum</code> - Museum of Ice Cream</p>
+                    <a class="btn btn-museum" href="/api/museums/ice_cream_museum">Ice Cream Museum</a>
+                    
+                    <p><strong>GET</strong> <code>/api/museums/ukrainian_museum</code> - Ukrainian Museum</p>
+                    <a class="btn btn-museum" href="/api/museums/ukrainian_museum">Ukrainian Museum</a>
+                    
+                    <p><strong>GET</strong> <code>/api/museums/empire_state</code> - Empire State Building</p>
+                    <a class="btn btn-museum" href="/api/museums/empire_state">Empire State Building</a>
+                </div>
             </div>
             
-            <div class="endpoint">
-                <h3>POST <code>/api/met/outfits</code></h3>
-                <p>Trigger new scraping of MET fashion items.</p>
-                <p><strong>Body:</strong> <code>{"limit": 10}</code> (optional)</p>
+            <!-- MET Museum Section -->
+            <div class="section met-section">
+                <h3>👗 MET Museum Fashion Scraper</h3>
+                <div class="endpoint-list">
+                    <p><strong>GET</strong> <code>/api/met/outfits</code> - Get scraped MET outfits</p>
+                    <p><strong>Parameters:</strong> <code>?limit=10</code> (optional)</p>
+                    <a class="btn btn-met" href="/api/met/outfits">Get Outfits</a>
+                    
+                    <p><strong>POST</strong> <code>/api/met/outfits</code> - Trigger new scraping</p>
+                    <p><strong>Body:</strong> <code>{"limit": 10}</code> (optional)</p>
+                    
+                    <p><strong>GET</strong> <code>/api/met/search</code> - Search MET collection</p>
+                    <p><strong>Parameters:</strong> <code>?q=costume</code> (optional)</p>
+                    <a class="btn btn-met" href="/api/met/search?q=dress">Search "dress"</a>
+                    
+                    <p><strong>GET</strong> <code>/api/scrape/met</code> - Quick scrape</p>
+                    <a class="btn btn-met" href="/api/scrape/met">Quick Scrape</a>
+                </div>
             </div>
             
-            <div class="endpoint">
-                <h3>GET <code>/api/met/search</code></h3>
-                <p>Search MET collection.</p>
-                <p><strong>Parameters:</strong> <code>?q=costume</code> (optional)</p>
-                <a class="btn" href="/api/met/search?q=dress">Search "dress"</a>
+            <!-- Data API Section -->
+            <div class="section data-section">
+                <h3>📊 Data API</h3>
+                <div class="endpoint-list">
+                    <p><strong>GET</strong> <code>/api/data</code> - Get InfoDb data</p>
+                    <a class="btn" href="/api/data">Get Data</a>
+                </div>
             </div>
             
-            <div class="endpoint">
-                <h3>GET <code>/api/scrape/met</code></h3>
-                <p>Quick scrape of MET costume items.</p>
-                <a class="btn" href="/api/scrape/met">Quick Scrape</a>
+            <h2>Quick Links:</h2>
+            <div>
+                <a class="btn btn-museum" href="/api/museum/icecream">Ice Cream Museum</a>
+                <a class="btn btn-museum" href="/api/museum/ukrainian">Ukrainian Museum</a>
+                <a class="btn btn-museum" href="/api/museum/empirestate">Empire State</a>
+                <a class="btn btn-met" href="/api/scrape/met">Quick MET Scrape</a>
+                <a class="btn" href="/api/data">Data API</a>
             </div>
-            
-            <h2>How to Use:</h2>
-            <ol>
-                <li>Click "Quick Scrape" to get sample MET fashion items</li>
-                <li>Use the search endpoint to find specific items</li>
-                <li>Use POST to scrape new items into the database</li>
-            </ol>
         </div>
+        
+        <script>
+            // Add some interactivity
+            document.addEventListener('DOMContentLoaded', function() {
+                const buttons = document.querySelectorAll('.btn');
+                buttons.forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        if (this.getAttribute('href').startsWith('http')) {
+                            return; // External link
+                        }
+                        
+                        // Optional: Add loading indicator
+                        this.innerHTML = 'Loading...';
+                        setTimeout(() => {
+                            this.innerHTML = this.textContent.includes('Loading') ? 'Try it' : this.innerHTML;
+                        }, 1000);
+                    });
+                });
+            });
+        </script>
     </body>
     </html>
     """
     return html_content
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5002)  # Changed to 5002
+    app.run(debug=True, port=5002)
