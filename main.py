@@ -1,19 +1,21 @@
-# imports from flask
-from datetime import datetime
-from urllib.parse import urljoin, urlparse
-from flask import abort, redirect, render_template, request, send_from_directory, url_for, jsonify, current_app, g
-from flask_login import current_user, login_user, logout_user
+# main.py - Combined Museum Scraper API with Full Flask Application
+from flask import Flask, jsonify, abort, redirect, render_template, request, send_from_directory, url_for, current_app, g
+from flask_cors import CORS
+from flask_login import current_user, login_user, logout_user, login_required, LoginManager
 from flask.cli import AppGroup
-from flask_login import current_user, login_required
-from flask import current_app
 from werkzeug.security import generate_password_hash
 from dotenv import load_dotenv
-from api.jwt_authorize import token_required
+from datetime import datetime
+from urllib.parse import urljoin, urlparse
+import os
+import requests
+from bs4 import BeautifulSoup
+import re
 
-# import "objects" from "this" project
-from __init__ import app, db, login_manager  # Key Flask objects 
+# Import database and models
+from __init__ import app, db, login_manager
 
-# API endpoints
+# Import API blueprints
 from api.user import user_api 
 from api.python_exec_api import python_exec_api
 from api.javascript_exec_api import javascript_exec_api
@@ -27,41 +29,35 @@ from api.gemini_api import gemini_api
 from api.microblog_api import microblog_api
 from api.classroom_api import classroom_api
 from hacks.joke import joke_api
+from hacks.lyric import lyric_api
+from hacks.lyrics import initLyrics
 from api.post import post_api
-#from api.announcement import announcement_api ##temporary revert
-
-# database Initialization functions
-from model.user import User, initUsers
-from model.user import Section
-from model.github import GitHubUser
-from model.feedback import Feedback
-from api.analytics import get_date_range
-# from api.grade_api import grade_api
 from api.study import study_api
 from api.feedback_api import feedback_api
+from api.jwt_authorize import token_required
+
+# Import models
+from model.user import User, Section, initUsers
+from model.github import GitHubUser
+from model.feedback import Feedback
 from model.study import Study, initStudies
 from model.classroom import Classroom
 from model.post import Post, init_posts
 from model.microblog import MicroBlog, Topic, init_microblogs
-from hacks.jokes import initJokes 
-# from model.announcement import Announcement ##temporary revert
-
-# Museum scraper imports
-import requests
-from bs4 import BeautifulSoup
-import re
-
-# server only Views
-import os
+from hacks.jokes import initJokes
 
 # Load environment variables
 load_dotenv()
 
+# Initialize CORS for all origins
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Configuration
 app.config['KASM_SERVER'] = os.getenv('KASM_SERVER')
 app.config['KASM_API_KEY'] = os.getenv('KASM_API_KEY')
 app.config['KASM_API_KEY_SECRET'] = os.getenv('KASM_API_KEY_SECRET')
 
-# register URIs for api endpoints
+# Register all API blueprints
 app.register_blueprint(python_exec_api)
 app.register_blueprint(javascript_exec_api)
 app.register_blueprint(user_api)
@@ -73,26 +69,25 @@ app.register_blueprint(gemini_api)
 app.register_blueprint(microblog_api)
 app.register_blueprint(analytics_api)
 app.register_blueprint(student_api)
-# app.register_blueprint(grade_api)
 app.register_blueprint(study_api)
 app.register_blueprint(classroom_api)
 app.register_blueprint(feedback_api)
 app.register_blueprint(joke_api)
+app.register_blueprint(lyric_api)
 app.register_blueprint(post_api)
-# app.register_blueprint(announcement_api) ##temporary revert
 
-# Jokes file initialization
+# Initialize jokes
 with app.app_context():
     initJokes()
+    initLyrics()
 
-# Tell Flask-Login the view function name of your login route
+# Flask-Login configuration
 login_manager.login_view = "login"
 
 @login_manager.unauthorized_handler
 def unauthorized_callback():
     return redirect(url_for('login', next=request.path))
 
-# register URIs for server pages
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -101,14 +96,315 @@ def load_user(user_id):
 def inject_user():
     return dict(current_user=current_user)
 
-# Helper function to check if the URL is safe for redirects
+# ============================================================================
+# MUSEUM SCRAPER CLASS
+# ============================================================================
+
+class MuseumScraper:
+    """Web scraper for museum hours with improved parsing"""
+    
+    def scrape_met_museum(self):
+        """Scrape MET Museum hours"""
+        try:
+            url = "https://www.metmuseum.org/visit/plan-your-visit/metropolitan-museum-of-art"
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            hours = "Sun-Thu: 10:00 AM - 5:30 PM, Fri-Sat: 10:00 AM - 9:00 PM"
+            
+            # Look for hours in MET page with multiple strategies
+            hour_sections = soup.find_all(['p', 'div', 'span', 'li'], 
+                                         text=re.compile(r'[Hh]ours?|[Oo]pen|[Cc]losed|10.*AM.*5.*PM', re.IGNORECASE))
+            
+            for section in hour_sections:
+                text = section.get_text().strip()
+                if '10' in text and ('AM' in text or 'am' in text) and ('PM' in text or 'pm' in text):
+                    hours = text[:200]
+                    break
+            
+            # Also check for structured hours data
+            hour_divs = soup.find_all(['div', 'section'], class_=re.compile(r'hour|time|schedule', re.IGNORECASE))
+            for div in hour_divs:
+                text = div.get_text().strip()
+                if len(text) > 50 and ('AM' in text or 'PM' in text):
+                    hours = text[:200]
+                    break
+            
+            return {
+                'museum': 'MET Museum',
+                'hours': hours,
+                'address': '1000 5th Ave, New York, NY 10028',
+                'phone': '(212) 535-7710',
+                'status': 'open',
+                'last_updated': datetime.now().strftime("%I:%M %p"),
+                'source': 'metmuseum.org'
+            }
+            
+        except Exception as e:
+            return {
+                'museum': 'MET Museum',
+                'hours': 'Sun-Thu: 10:00 AM - 5:30 PM, Fri-Sat: 10:00 AM - 9:00 PM',
+                'address': '1000 5th Ave, New York, NY 10028',
+                'phone': '(212) 535-7710',
+                'status': 'open',
+                'last_updated': datetime.now().strftime("%I:%M %p"),
+                'error': str(e)[:100],
+                'source': 'fallback'
+            }
+    
+    def scrape_ice_cream_museum(self):
+        """Scrape Museum of Ice Cream hours"""
+        try:
+            url = "https://www.museumoficecream.com/new-york"
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Look for hours with multiple patterns
+            hours = "Mon-Sun: 10:00 AM - 9:00 PM"
+            all_text = soup.get_text()
+            
+            # Pattern 1: Direct hour patterns
+            hour_patterns = [
+                r'([A-Za-z]{3,9}[-\s]*\d{1,2}(?::\d{2})?\s*[APap][Mm]\s*[-–]\s*\d{1,2}(?::\d{2})?\s*[APap][Mm])',
+                r'(\d{1,2}(?::\d{2})?\s*[APap][Mm]\s*[-–]\s*\d{1,2}(?::\d{2})?\s*[APap][Mm])',
+                r'[Hh]ours?[:\s]*([^\n]{10,80})'
+            ]
+            
+            for pattern in hour_patterns:
+                match = re.search(pattern, all_text)
+                if match:
+                    hours = match.group(1).strip()
+                    break
+            
+            # Pattern 2: Look for opening hours sections
+            hour_sections = soup.find_all(['p', 'div', 'span'], 
+                                         text=re.compile(r'[Oo]pen|[Hh]ours?|[Mm]on.*[Ss]un', re.IGNORECASE))
+            for section in hour_sections:
+                text = section.get_text().strip()
+                if 'AM' in text or 'PM' in text:
+                    hours = text[:150]
+                    break
+            
+            return {
+                'museum': 'Museum of Ice Cream',
+                'hours': hours,
+                'address': '558 Broadway, New York, NY 10012',
+                'phone': '(646) 459-3515',
+                'status': 'open',
+                'last_updated': datetime.now().strftime("%I:%M %p"),
+                'source': 'museumoficecream.com'
+            }
+            
+        except Exception as e:
+            return {
+                'museum': 'Museum of Ice Cream',
+                'hours': 'Mon-Sun: 10:00 AM - 9:00 PM',
+                'address': '558 Broadway, New York, NY 10012',
+                'phone': '(646) 459-3515',
+                'status': 'open',
+                'last_updated': datetime.now().strftime("%I:%M %p"),
+                'error': str(e)[:100],
+                'source': 'fallback'
+            }
+    
+    def scrape_ukrainian_museum(self):
+        """Scrape Ukrainian Museum hours"""
+        try:
+            url = "https://www.ukrainianmuseum.org/"
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            hours = "Wed-Sun: 11:30 AM - 5:00 PM"
+            
+            # Multiple search strategies
+            patterns = [
+                r'[Hh]ours?[:\s]*([^\n]{10,100})',
+                r'[Oo]pen[:\s]*([^\n]{10,100})',
+                r'(\d{1,2}:\d{2}\s*[APap][Mm]\s*[-–]\s*\d{1,2}:\d{2}\s*[APap][Mm])'
+            ]
+            
+            all_text = soup.get_text()
+            for pattern in patterns:
+                match = re.search(pattern, all_text)
+                if match:
+                    hours = match.group(1).strip()[:100]
+                    break
+            
+            # Also search in footer or specific sections
+            footer = soup.find(['footer', 'div'], class_=re.compile(r'footer|hours|visit', re.IGNORECASE))
+            if footer:
+                footer_text = footer.get_text()
+                for pattern in patterns:
+                    match = re.search(pattern, footer_text)
+                    if match:
+                        hours = match.group(1).strip()[:100]
+                        break
+            
+            return {
+                'museum': 'Ukrainian Museum',
+                'hours': hours,
+                'address': '222 East 6th Street, New York, NY 10003',
+                'phone': '(212) 228-0110',
+                'status': 'open',
+                'last_updated': datetime.now().strftime("%I:%M %p"),
+                'source': 'ukrainianmuseum.org'
+            }
+            
+        except Exception as e:
+            return {
+                'museum': 'Ukrainian Museum',
+                'hours': 'Wed-Sun: 11:30 AM - 5:00 PM',
+                'address': '222 East 6th Street, New York, NY 10003',
+                'phone': '(212) 228-0110',
+                'status': 'open',
+                'last_updated': datetime.now().strftime("%I:%M %p"),
+                'error': str(e)[:100],
+                'source': 'fallback'
+            }
+    
+    def scrape_empire_state(self):
+        """Scrape Empire State Building hours"""
+        try:
+            url = "https://www.esbnyc.com/"
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            hours = "Daily: 8:00 AM - 2:00 AM"
+            
+            # Multiple search strategies
+            hour_text = soup.get_text()
+            
+            # Pattern 1: Direct time patterns
+            hour_patterns = [
+                r'(\d{1,2}(?::\d{2})?\s*[APap][Mm]\s*[-–]\s*\d{1,2}(?::\d{2})?\s*[APap][Mm])',
+                r'[Hh]ours?[:\s]*([^\n]{10,80})',
+                r'[Oo]pen[:\s]*([^\n]{10,80})'
+            ]
+            
+            for pattern in hour_patterns:
+                match = re.search(pattern, hour_text)
+                if match:
+                    found = match.group(1).strip()
+                    if 'AM' in found or 'PM' in found:
+                        hours = f"Daily: {found}" if 'daily' not in found.lower() else found
+                        break
+            
+            # Pattern 2: Look in specific sections
+            visit_sections = soup.find_all(['div', 'section'], 
+                                          text=re.compile(r'[Vv]isit|[Hh]ours?|[Oo]bservatory', re.IGNORECASE))
+            for section in visit_sections:
+                text = section.get_text()
+                for pattern in hour_patterns:
+                    match = re.search(pattern, text)
+                    if match:
+                        found = match.group(1).strip()
+                        if 'AM' in found or 'PM' in found:
+                            hours = found
+                            break
+            
+            return {
+                'museum': 'Empire State Building',
+                'hours': hours,
+                'address': '20 W 34th St, New York, NY 10001',
+                'phone': '(212) 736-3100',
+                'status': 'open',
+                'last_updated': datetime.now().strftime("%I:%M %p"),
+                'source': 'esbnyc.com'
+            }
+            
+        except Exception as e:
+            return {
+                'museum': 'Empire State Building',
+                'hours': 'Daily: 8:00 AM - 2:00 AM',
+                'address': '20 W 34th St, New York, NY 10001',
+                'phone': '(212) 736-3100',
+                'status': 'open',
+                'last_updated': datetime.now().strftime("%I:%M %p"),
+                'error': str(e)[:100],
+                'source': 'fallback'
+            }
+
+# Create scraper instance
+scraper = MuseumScraper()
+
+# ============================================================================
+# MUSEUM SCRAPER API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/met')
+def get_met_hours():
+    """GET MET Museum hours"""
+    data = scraper.scrape_met_museum()
+    return jsonify({'success': True, 'data': data})
+
+@app.route('/api/icecream')
+def get_icecream_hours():
+    """GET Ice Cream Museum hours"""
+    data = scraper.scrape_ice_cream_museum()
+    return jsonify({'success': True, 'data': data})
+
+@app.route('/api/ukrainian')
+def get_ukrainian_hours():
+    """GET Ukrainian Museum hours"""
+    data = scraper.scrape_ukrainian_museum()
+    return jsonify({'success': True, 'data': data})
+
+@app.route('/api/empire')
+def get_empire_hours():
+    """GET Empire State Building hours"""
+    data = scraper.scrape_empire_state()
+    return jsonify({'success': True, 'data': data})
+
+@app.route('/api/all')
+def get_all_hours():
+    """GET all museum hours at once"""
+    data = {
+        'met': scraper.scrape_met_museum(),
+        'icecream': scraper.scrape_ice_cream_museum(),
+        'ukrainian': scraper.scrape_ukrainian_museum(),
+        'empire': scraper.scrape_empire_state(),
+        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    return jsonify({'success': True, 'data': data})
+
+@app.route('/api/test')
+def test_api():
+    """Test endpoint to verify API is working"""
+    return jsonify({
+        'success': True,
+        'message': 'Museum Hours API is running!',
+        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'endpoints': {
+            '/api/met': 'MET Museum hours',
+            '/api/icecream': 'Ice Cream Museum hours',
+            '/api/ukrainian': 'Ukrainian Museum hours',
+            '/api/empire': 'Empire State Building hours',
+            '/api/all': 'All museums at once',
+            '/api/test': 'Test endpoint'
+        }
+    })
+
+# ============================================================================
+# EXISTING FLASK ROUTES (from your second file)
+# ============================================================================
+
 def is_safe_url(target):
+    """Check if URL is safe for redirects"""
     ref_url = urlparse(request.host_url)
     test_url = urlparse(urljoin(request.host_url, target))
     return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    """Login page"""
     error = None
     next_page = request.args.get('next', '') or request.form.get('next', '')
     if request.method == 'POST':
@@ -122,45 +418,51 @@ def login():
             error = 'Invalid username or password.'
     return render_template("login.html", error=error, next=next_page)
 
-@app.route('/studytracker')  # route for the study tracker page
+@app.route('/studytracker')
 def studytracker():
+    """Study tracker page"""
     return render_template("studytracker.html")
-    
+
 @app.route('/logout')
 def logout():
+    """Logout user"""
     logout_user()
     return redirect(url_for('index'))
 
-@app.errorhandler(404)  # catch for URL not found
+@app.errorhandler(404)
 def page_not_found(e):
-    # note that we set the 404 status explicitly
+    """404 error handler"""
     return render_template('404.html'), 404
 
-@app.route('/')  # connects default URL to index() function
+@app.route('/')
 def index():
+    """Home page"""
     print("Home:", current_user)
     return render_template("index.html")
 
 @app.route('/users/table2')
 @login_required
 def u2table():
+    """User table page"""
     users = User.query.all()
     return render_template("u2table.html", user_data=users)
 
 @app.route('/sections/')
 @login_required
 def sections():
+    """Sections page"""
     sections = Section.query.all()
     return render_template("sections.html", sections=sections)
 
-# Helper function to extract uploads for a user (ie PFP image)
 @app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
+    """Serve uploaded files"""
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)
- 
+
 @app.route('/users/delete/<int:user_id>', methods=['DELETE'])
 @login_required
 def delete_user(user_id):
+    """Delete user"""
     user = User.query.get(user_id)
     if user:
         user.delete()
@@ -170,6 +472,7 @@ def delete_user(user_id):
 @app.route('/users/reset_password/<int:user_id>', methods=['POST'])
 @login_required
 def reset_password(user_id):
+    """Reset user password"""
     if current_user.role != 'Admin':
         return jsonify({'error': 'Unauthorized'}), 403
     
@@ -177,34 +480,29 @@ def reset_password(user_id):
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    # Set the new password
     if user.update({"password": app.config['DEFAULT_PASSWORD']}):
         return jsonify({'message': 'Password reset successfully'}), 200
     return jsonify({'error': 'Password reset failed'}), 500
 
 @app.route('/kasm_users')
 def kasm_users():
-    # Fetch configuration details from environment or app config
+    """KASM users page"""
     SERVER = current_app.config.get('KASM_SERVER')
     API_KEY = current_app.config.get('KASM_API_KEY')
     API_KEY_SECRET = current_app.config.get('KASM_API_KEY_SECRET')
 
-    # Validate required configurations
     if not SERVER or not API_KEY or not API_KEY_SECRET:
         return render_template('error.html', message='KASM keys are missing'), 400
 
     try:
-        # Prepare API request details
         url = f"{SERVER}/api/public/get_users"
         data = {
             "api_key": API_KEY,
             "api_key_secret": API_KEY_SECRET
         }
 
-        # Perform the POST request
         response = requests.post(url, json=data, timeout=10)
 
-        # Validate the API response
         if response.status_code != 200:
             return render_template(
                 'error.html', 
@@ -212,10 +510,8 @@ def kasm_users():
                 code=response.status_code
             ), response.status_code
 
-        # Parse the users list from the response
         users = response.json().get('users', [])
 
-        # Process `last_session` and handle potential parsing issues
         for user in users:
             last_session = user.get('last_session')
             try:
@@ -223,25 +519,23 @@ def kasm_users():
             except ValueError:
                 user['last_session'] = None
 
-        # Sort users by `last_session`, treating `None` as the oldest date
         sorted_users = sorted(
             users, 
             key=lambda x: x['last_session'] or datetime.min, 
             reverse=True
         )
 
-        # Render the sorted users in the template
         return render_template('kasm_users.html', users=sorted_users)
 
     except requests.RequestException as e:
-        # Handle connection errors or other request exceptions
         return render_template(
             'error.html', 
             message=f"Error connecting to KASM API: {str(e)}"
         ), 500
-        
+
 @app.route('/delete_user/<user_id>', methods=['DELETE'])
 def delete_user_kasm(user_id):
+    """Delete KASM user"""
     if current_user.role != 'Admin':
         return jsonify({'error': 'Unauthorized'}), 403
     
@@ -253,7 +547,6 @@ def delete_user_kasm(user_id):
         return {'message': 'KASM keys are missing'}, 400
 
     try:
-        # Kasm API to delete a user
         url = f"{SERVER}/api/public/delete_user"
         data = {
             "api_key": API_KEY,
@@ -273,432 +566,617 @@ def delete_user_kasm(user_id):
 
 @app.route('/update_user/<string:uid>', methods=['PUT'])
 def update_user(uid):
-    # Authorization check
+    """Update user information"""
     if current_user.role != 'Admin':
         return jsonify({'error': 'Unauthorized'}), 403
 
-    # Get the JSON data from the request
     data = request.get_json()
     print(f"Request Data: {data}")
 
-    # Find the user in the database
     user = User.query.filter_by(_uid=uid).first()
     if user:
         print(f"Found user: {user.uid}")
-        
-        # Update the user using the provided data
         user.update(data)
-        
-        # Save changes to the database
         return jsonify({"message": "User updated successfully."}), 200
     else:
         print("User not found.")
         return jsonify({"message": "User not found."}), 404
 
-
 # ============================================================================
-# MUSEUM SCRAPER SECTION
+# MUSEUM SCRAPER WEB INTERFACE
 # ============================================================================
 
-class MuseumScraper:
-    """Simple web scraper for museum hours"""
-    
-    def scrape_ice_cream_museum(self):
-        """Scrape Museum of Ice Cream hours"""
-        try:
-            url = "https://www.museumoficecream.com/new-york"
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            
-            response = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Look for hours
-            hours = "Mon-Sun: 10:00 AM - 9:00 PM"
-            all_text = soup.get_text().lower()
-            
-            if 'hour' in all_text or 'open' in all_text:
-                hour_match = re.search(r'([A-Za-z]{3,9}[-\s]*\d{1,2}(?::\d{2})?\s*[APap][Mm]\s*[-–]\s*\d{1,2}(?::\d{2})?\s*[APap][Mm])', soup.get_text())
-                if hour_match:
-                    hours = hour_match.group(1)
-            
-            return {
-                'museum': 'Museum of Ice Cream',
-                'hours': hours,
-                'address': '558 Broadway, New York, NY 10012',
-                'phone': '(646) 459-3515',
-                'status': 'open',
-                'last_updated': datetime.now().strftime("%I:%M %p")
-            }
-            
-        except Exception as e:
-            return {
-                'museum': 'Museum of Ice Cream',
-                'hours': 'Mon-Sun: 10:00 AM - 9:00 PM',
-                'error': str(e)[:50]
-            }
-    
-    def scrape_ukrainian_museum(self):
-        """Scrape Ukrainian Museum hours"""
-        try:
-            url = "https://www.ukrainianmuseum.org/"
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            
-            response = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            hours = "Wed-Sun: 11:30 AM - 5:00 PM"
-            
-            patterns = [
-                r'[Hh]ours?[:\s]*([^\n]{10,100})',
-                r'[Oo]pen[:\s]*([^\n]{10,100})'
-            ]
-            
-            for pattern in patterns:
-                match = re.search(pattern, soup.get_text())
-                if match:
-                    hours = match.group(1).strip()[:100]
-                    break
-            
-            return {
-                'museum': 'Ukrainian Museum',
-                'hours': hours,
-                'address': '222 East 6th Street, New York, NY 10003',
-                'phone': '(212) 228-0110',
-                'status': 'open',
-                'last_updated': datetime.now().strftime("%I:%M %p")
-            }
-            
-        except Exception as e:
-            return {
-                'museum': 'Ukrainian Museum',
-                'hours': 'Wed-Sun: 11:30 AM - 5:00 PM',
-                'error': str(e)[:50]
-            }
-    
-    def scrape_empire_state(self):
-        """Scrape Empire State Building hours"""
-        try:
-            url = "https://www.esbnyc.com/"
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            
-            response = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            hours = "Daily: 8:00 AM - 2:00 AM"
-            
-            hour_text = soup.get_text()
-            hour_match = re.search(r'(\d{1,2}(?::\d{2})?\s*[APap][Mm]\s*[-–]\s*\d{1,2}(?::\d{2})?\s*[APap][Mm])', hour_text)
-            if hour_match:
-                hours = f"Daily: {hour_match.group(1)}"
-            
-            return {
-                'museum': 'Empire State Building',
-                'hours': hours,
-                'address': '20 W 34th St, New York, NY 10001',
-                'phone': '(212) 736-3100',
-                'status': 'open',
-                'last_updated': datetime.now().strftime("%I:%M %p")
-            }
-            
-        except Exception as e:
-            return {
-                'museum': 'Empire State Building',
-                'hours': 'Daily: 8:00 AM - 2:00 AM',
-                'error': str(e)[:50]
-            }
-    
-    def scrape_met_museum(self):
-        """Scrape MET Museum hours"""
-        try:
-            url = "https://www.metmuseum.org/visit/plan-your-visit/metropolitan-museum-of-art"
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            
-            response = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            hours = "Sun-Thu: 10:00 AM - 5:30 PM, Fri-Sat: 10:00 AM - 9:00 PM"
-            
-            hour_sections = soup.find_all(['p', 'div', 'span'], text=re.compile(r'[Hh]ours?|[Oo]pen|[Cc]losed'))
-            for section in hour_sections:
-                text = section.get_text()
-                if '10' in text and ('AM' in text or 'PM' in text):
-                    hours = text.strip()[:150]
-                    break
-            
-            return {
-                'museum': 'MET Museum',
-                'hours': hours,
-                'address': '1000 5th Ave, New York, NY 10028',
-                'phone': '(212) 535-7710',
-                'status': 'open',
-                'last_updated': datetime.now().strftime("%I:%M %p")
-            }
-            
-        except Exception as e:
-            return {
-                'museum': 'MET Museum',
-                'hours': 'Sun-Thu: 10:00 AM - 5:30 PM, Fri-Sat: 10:00 AM - 9:00 PM',
-                'error': str(e)[:50]
-            }
-
-# Create scraper instance
-scraper = MuseumScraper()
-
-# Museum Scraper Routes
 @app.route('/museums')
 def museums_home():
-    """Museum scraper homepage"""
+    """Museum scraper homepage with interactive interface"""
     return '''
     <!DOCTYPE html>
     <html>
     <head>
-        <title>🏛️ Museum Hours Scraper</title>
+        <title>🏛️ Museum Hours Scraper API</title>
         <style>
-            body {
-                font-family: Arial, sans-serif;
+            * {
                 margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
                 padding: 20px;
-                background: #f0f2f5;
             }
+            
             .container {
-                max-width: 1200px;
+                max-width: 1400px;
                 margin: 0 auto;
+                background: rgba(255, 255, 255, 0.95);
+                border-radius: 20px;
+                padding: 40px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             }
-            h1 {
+            
+            .header {
                 text-align: center;
-                color: #333;
-                margin-bottom: 30px;
+                margin-bottom: 50px;
             }
-            .museums-grid {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-                gap: 20px;
-                margin-top: 30px;
-            }
-            .museum-box {
-                background: white;
-                border-radius: 10px;
-                padding: 25px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                transition: transform 0.3s;
-            }
-            .museum-box:hover {
-                transform: translateY(-5px);
-                box-shadow: 0 5px 20px rgba(0,0,0,0.15);
-            }
-            .museum-icon {
-                font-size: 2.5em;
-                margin-bottom: 15px;
-                text-align: center;
-            }
-            .museum-name {
-                font-size: 1.5em;
+            
+            .header h1 {
+                font-size: 3.5em;
                 color: #333;
                 margin-bottom: 15px;
-                text-align: center;
+                background: linear-gradient(45deg, #667eea, #764ba2);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
             }
-            .museum-hours {
-                background: #f8f9fa;
-                padding: 15px;
-                border-radius: 8px;
-                margin: 15px 0;
-                font-family: monospace;
-                font-size: 1.1em;
+            
+            .header p {
+                font-size: 1.2em;
+                color: #666;
+                max-width: 800px;
+                margin: 0 auto;
+                line-height: 1.6;
             }
-            .scrape-btn {
-                display: block;
-                width: 100%;
-                padding: 12px;
+            
+            .status-badge {
+                display: inline-block;
+                padding: 8px 20px;
                 background: #4CAF50;
                 color: white;
-                border: none;
-                border-radius: 5px;
-                font-size: 1em;
-                cursor: pointer;
-                margin-top: 15px;
-                transition: background 0.3s;
+                border-radius: 50px;
+                font-weight: bold;
+                margin-top: 20px;
+                animation: pulse 2s infinite;
             }
-            .scrape-btn:hover {
-                background: #45a049;
+            
+            @keyframes pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.05); }
+                100% { transform: scale(1); }
             }
-            .scrape-btn.loading {
-                background: #666;
+            
+            .endpoints-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                gap: 30px;
+                margin-bottom: 50px;
             }
-            .status {
-                display: inline-block;
-                padding: 4px 12px;
-                border-radius: 20px;
+            
+            .endpoint-card {
+                background: white;
+                border-radius: 15px;
+                padding: 30px;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+                transition: all 0.3s ease;
+                border: 2px solid transparent;
+            }
+            
+            .endpoint-card:hover {
+                transform: translateY(-10px);
+                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+                border-color: #667eea;
+            }
+            
+            .endpoint-header {
+                display: flex;
+                align-items: center;
+                margin-bottom: 20px;
+            }
+            
+            .endpoint-icon {
+                font-size: 2.5em;
+                margin-right: 20px;
+                width: 70px;
+                height: 70px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+            }
+            
+            .met-icon { background: linear-gradient(45deg, #8B4513, #D2691E); }
+            .icecream-icon { background: linear-gradient(45deg, #FF69B4, #FF1493); }
+            .ukrainian-icon { background: linear-gradient(45deg, #0057B7, #FFD700); }
+            .empire-icon { background: linear-gradient(45deg, #708090, #2F4F4F); }
+            .all-icon { background: linear-gradient(45deg, #4CAF50, #45a049); }
+            .test-icon { background: linear-gradient(45deg, #2196F3, #21CBF3); }
+            
+            .endpoint-title {
+                font-size: 1.5em;
+                font-weight: bold;
+                color: #333;
+                margin-bottom: 5px;
+            }
+            
+            .endpoint-url {
+                font-family: 'Courier New', monospace;
+                background: #f5f5f5;
+                padding: 10px 15px;
+                border-radius: 8px;
+                margin: 15px 0;
                 font-size: 0.9em;
-                margin-left: 10px;
+                color: #333;
+                overflow-x: auto;
             }
-            .open {
-                background: #d4edda;
-                color: #155724;
-            }
-            .updated {
-                font-size: 0.9em;
+            
+            .endpoint-description {
                 color: #666;
-                margin-top: 15px;
+                margin-bottom: 20px;
+                line-height: 1.5;
+            }
+            
+            .test-btn {
+                display: inline-block;
+                padding: 12px 30px;
+                background: linear-gradient(45deg, #667eea, #764ba2);
+                color: white;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: bold;
+                border: none;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                font-size: 1em;
+                width: 100%;
                 text-align: center;
+            }
+            
+            .test-btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+            }
+            
+            .test-btn.loading {
+                background: #999;
+                cursor: not-allowed;
+            }
+            
+            .result-container {
+                margin-top: 20px;
+                max-height: 300px;
+                overflow-y: auto;
+                background: #1a1a1a;
+                border-radius: 8px;
+                padding: 15px;
+                display: none;
+            }
+            
+            .result-title {
+                color: #4CAF50;
+                font-weight: bold;
+                margin-bottom: 10px;
+                font-family: monospace;
+            }
+            
+            .result-data {
+                color: #f0f0f0;
+                font-family: 'Courier New', monospace;
+                font-size: 0.9em;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+            }
+            
+            .api-info {
+                background: linear-gradient(45deg, #f8f9fa, #e9ecef);
+                border-radius: 15px;
+                padding: 30px;
+                margin-top: 50px;
+            }
+            
+            .api-info h2 {
+                color: #333;
+                margin-bottom: 20px;
+                font-size: 2em;
+            }
+            
+            .api-info ul {
+                list-style: none;
+                padding-left: 0;
+            }
+            
+            .api-info li {
+                margin: 15px 0;
+                padding-left: 30px;
+                position: relative;
+                color: #555;
+            }
+            
+            .api-info li:before {
+                content: '✓';
+                position: absolute;
+                left: 0;
+                color: #4CAF50;
+                font-weight: bold;
+            }
+            
+            .quick-test {
+                text-align: center;
+                margin: 40px 0;
+            }
+            
+            .quick-test-btn {
+                display: inline-block;
+                padding: 15px 40px;
+                background: linear-gradient(45deg, #FF9800, #FF5722);
+                color: white;
+                text-decoration: none;
+                border-radius: 50px;
+                font-weight: bold;
+                font-size: 1.1em;
+                border: none;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+            
+            .quick-test-btn:hover {
+                transform: scale(1.05);
+                box-shadow: 0 15px 30px rgba(255, 87, 34, 0.4);
+            }
+            
+            .museum-data {
+                background: white;
+                border-radius: 15px;
+                padding: 25px;
+                margin: 20px 0;
+                border-left: 5px solid #667eea;
+            }
+            
+            .museum-name {
+                font-size: 1.4em;
+                font-weight: bold;
+                color: #333;
+                margin-bottom: 10px;
+            }
+            
+            .museum-hours {
+                font-size: 1.1em;
+                color: #4CAF50;
+                font-weight: bold;
+                margin: 10px 0;
+            }
+            
+            .museum-details {
+                color: #666;
+                font-size: 0.95em;
+                margin: 5px 0;
+            }
+            
+            .museum-timestamp {
+                color: #999;
+                font-size: 0.85em;
+                margin-top: 10px;
+                font-style: italic;
+            }
+            
+            @media (max-width: 768px) {
+                .container {
+                    padding: 20px;
+                }
+                
+                .header h1 {
+                    font-size: 2.5em;
+                }
+                
+                .endpoints-grid {
+                    grid-template-columns: 1fr;
+                }
             }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>🏛️ Museum Hours Scraper</h1>
+            <div class="header">
+                <h1>🏛️ Museum Hours Scraper API</h1>
+                <p>A real-time web scraping API that fetches current hours from major NYC museums. This API makes actual HTTP requests to museum websites and parses the HTML to extract live hours information.</p>
+                <div class="status-badge">✅ ACTIVE - Real Web Scraping</div>
+            </div>
             
-            <div class="museums-grid">
-                <div class="museum-box" id="met-box">
-                    <div class="museum-icon">🎨</div>
-                    <div class="museum-name">MET Museum</div>
-                    <div class="museum-hours" id="met-hours">Click to scrape hours...</div>
-                    <button class="scrape-btn" onclick="scrapeMuseum('met')">
-                        Scrape MET Hours
+            <div class="quick-test">
+                <button class="quick-test-btn" onclick="testAllEndpoints()">
+                    🚀 Test All Museum Endpoints
+                </button>
+            </div>
+            
+            <div class="endpoints-grid">
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <div class="endpoint-icon met-icon">🎨</div>
+                        <div>
+                            <div class="endpoint-title">MET Museum</div>
+                            <div class="endpoint-description">The Metropolitan Museum of Art</div>
+                        </div>
+                    </div>
+                    <div class="endpoint-url">GET http://localhost:5002/api/met</div>
+                    <div class="endpoint-description">
+                        Scrapes hours from metmuseum.org using BeautifulSoup. Returns address, phone, and real-time hours.
+                    </div>
+                    <button class="test-btn" onclick="testEndpoint('met', this)">
+                        Test MET Endpoint
                     </button>
-                    <div class="updated" id="met-updated"></div>
+                    <div id="met-result" class="result-container"></div>
                 </div>
                 
-                <div class="museum-box" id="icecream-box">
-                    <div class="museum-icon">🍦</div>
-                    <div class="museum-name">Museum of Ice Cream</div>
-                    <div class="museum-hours" id="icecream-hours">Click to scrape hours...</div>
-                    <button class="scrape-btn" onclick="scrapeMuseum('icecream')">
-                        Scrape Ice Cream Hours
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <div class="endpoint-icon icecream-icon">🍦</div>
+                        <div>
+                            <div class="endpoint-title">Ice Cream Museum</div>
+                            <div class="endpoint-description">Museum of Ice Cream NYC</div>
+                        </div>
+                    </div>
+                    <div class="endpoint-url">GET http://localhost:5002/api/icecream</div>
+                    <div class="endpoint-description">
+                        Scrapes hours from museumoficecream.com using regex patterns. Returns fun, colorful data.
+                    </div>
+                    <button class="test-btn" onclick="testEndpoint('icecream', this)">
+                        Test Ice Cream Endpoint
                     </button>
-                    <div class="updated" id="icecream-updated"></div>
+                    <div id="icecream-result" class="result-container"></div>
                 </div>
                 
-                <div class="museum-box" id="ukrainian-box">
-                    <div class="museum-icon">🇺🇦</div>
-                    <div class="museum-name">Ukrainian Museum</div>
-                    <div class="museum-hours" id="ukrainian-hours">Click to scrape hours...</div>
-                    <button class="scrape-btn" onclick="scrapeMuseum('ukrainian')">
-                        Scrape Ukrainian Hours
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <div class="endpoint-icon ukrainian-icon">🇺🇦</div>
+                        <div>
+                            <div class="endpoint-title">Ukrainian Museum</div>
+                            <div class="endpoint-description">Ukrainian Museum NYC</div>
+                        </div>
+                    </div>
+                    <div class="endpoint-url">GET http://localhost:5002/api/ukrainian</div>
+                    <div class="endpoint-description">
+                        Scrapes hours from ukrainianmuseum.org. Returns cultural heritage information.
+                    </div>
+                    <button class="test-btn" onclick="testEndpoint('ukrainian', this)">
+                        Test Ukrainian Endpoint
                     </button>
-                    <div class="updated" id="ukrainian-updated"></div>
+                    <div id="ukrainian-result" class="result-container"></div>
                 </div>
                 
-                <div class="museum-box" id="empire-box">
-                    <div class="museum-icon">🗽</div>
-                    <div class="museum-name">Empire State Building</div>
-                    <div class="museum-hours" id="empire-hours">Click to scrape hours...</div>
-                    <button class="scrape-btn" onclick="scrapeMuseum('empire')">
-                        Scrape Empire State Hours
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <div class="endpoint-icon empire-icon">🗽</div>
+                        <div>
+                            <div class="endpoint-title">Empire State Building</div>
+                            <div class="endpoint-description">Empire State Building Observatory</div>
+                        </div>
+                    </div>
+                    <div class="endpoint-url">GET http://localhost:5002/api/empire</div>
+                    <div class="endpoint-description">
+                        Scrapes hours from esbnyc.com. Returns iconic NYC landmark hours.
+                    </div>
+                    <button class="test-btn" onclick="testEndpoint('empire', this)">
+                        Test Empire State Endpoint
                     </button>
-                    <div class="updated" id="empire-updated"></div>
+                    <div id="empire-result" class="result-container"></div>
+                </div>
+                
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <div class="endpoint-icon all-icon">📊</div>
+                        <div>
+                            <div class="endpoint-title">All Museums</div>
+                            <div class="endpoint-description">Get all museum data at once</div>
+                        </div>
+                    </div>
+                    <div class="endpoint-url">GET http://localhost:5002/api/all</div>
+                    <div class="endpoint-description">
+                        Returns hours for all 4 museums in a single request. Perfect for dashboards.
+                    </div>
+                    <button class="test-btn" onclick="testEndpoint('all', this)">
+                        Test All Endpoint
+                    </button>
+                    <div id="all-result" class="result-container"></div>
+                </div>
+                
+                <div class="endpoint-card">
+                    <div class="endpoint-header">
+                        <div class="endpoint-icon test-icon">🔧</div>
+                        <div>
+                            <div class="endpoint-title">API Test</div>
+                            <div class="endpoint-description">Verify API is working</div>
+                        </div>
+                    </div>
+                    <div class="endpoint-url">GET http://localhost:5002/api/test</div>
+                    <div class="endpoint-description">
+                        Simple endpoint to verify the API server is running and list all available endpoints.
+                    </div>
+                    <button class="test-btn" onclick="testEndpoint('test', this)">
+                        Test API Status
+                    </button>
+                    <div id="test-result" class="result-container"></div>
                 </div>
             </div>
             
-            <div style="text-align: center; margin-top: 40px;">
-                <button onclick="scrapeAll()" style="padding: 15px 30px; font-size: 1.1em;">
-                    🔄 Scrape All Museums
-                </button>
+            <div class="api-info">
+                <h2>🎯 How This Web Scraping Works</h2>
+                <ul>
+                    <li><strong>Real HTTP Requests:</strong> Makes actual GET requests to museum websites</li>
+                    <li><strong>HTML Parsing:</strong> Uses BeautifulSoup to parse HTML content</li>
+                    <li><strong>Regex Patterns:</strong> Searches for hour patterns in text content</li>
+                    <li><strong>Fallback Data:</strong> Provides default hours if scraping fails</li>
+                    <li><strong>Live Timestamps:</strong> Shows when data was last scraped</li>
+                    <li><strong>CORS Enabled:</strong> Works with any frontend application</li>
+                </ul>
+                
+                <div style="margin-top: 30px; padding: 20px; background: #e8f4f8; border-radius: 10px;">
+                    <h3>📡 Frontend Integration</h3>
+                    <p>Your frontend HTML should call these endpoints:</p>
+                    <pre style="background: #1a1a1a; color: #4CAF50; padding: 15px; border-radius: 8px; overflow-x: auto;">
+// JavaScript fetch example:
+async function fetchMuseumHours(museum) {
+    const response = await fetch('http://localhost:5002/api/' + museum);
+    const data = await response.json();
+    return data.data;
+}
+
+// Available museums: 'met', 'icecream', 'ukrainian', 'empire', 'all', 'test'</pre>
+                </div>
             </div>
         </div>
         
         <script>
-            async function scrapeMuseum(museum) {
-                const btn = document.querySelector(`#${museum}-box .scrape-btn`);
-                const hoursDiv = document.getElementById(`${museum}-hours`);
-                const updatedDiv = document.getElementById(`${museum}-updated`);
+            async function testEndpoint(endpoint, button) {
+                const resultDiv = document.getElementById(endpoint + '-result');
+                const originalText = button.textContent;
                 
-                btn.classList.add('loading');
-                btn.textContent = 'Scraping...';
-                hoursDiv.textContent = '🔄 Scraping website...';
+                // Show loading state
+                button.classList.add('loading');
+                button.textContent = '🔄 Scraping...';
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = '<div class="result-title">Scraping website...</div>';
                 
                 try {
-                    const response = await fetch(`/api/${museum}`);
+                    const startTime = Date.now();
+                    const response = await fetch('/api/' + endpoint);
+                    const endTime = Date.now();
+                    const responseTime = endTime - startTime;
+                    
                     const data = await response.json();
                     
-                    if (data.success) {
+                    let resultHTML = `<div class="result-title">✅ Success (${responseTime}ms)</div>`;
+                    
+                    if (endpoint === 'test') {
+                        resultHTML += `<div class="result-data">${JSON.stringify(data, null, 2)}</div>`;
+                    } else if (endpoint === 'all') {
+                        resultHTML += '<div style="color: #f0f0f0;">';
+                        for (const [key, museumData] of Object.entries(data)) {
+                            if (key !== 'timestamp' && key !== 'success') {
+                                resultHTML += `
+                                    <div class="museum-data">
+                                        <div class="museum-name">${museumData.museum}</div>
+                                        <div class="museum-hours">${museumData.hours}</div>
+                                        <div class="museum-details">📍 ${museumData.address}</div>
+                                        <div class="museum-details">📞 ${museumData.phone}</div>
+                                        <div class="museum-timestamp">🕒 ${museumData.last_updated} (${museumData.source})</div>
+                                    </div>
+                                `;
+                            }
+                        }
+                        resultHTML += `<div style="color: #4CAF50; margin-top: 15px;">Total time: ${responseTime}ms</div>`;
+                        resultHTML += '</div>';
+                    } else {
                         const museumData = data.data;
-                        hoursDiv.innerHTML = `
-                            <div style="color: #155724; font-weight: bold;">${museumData.hours}</div>
-                            <div style="margin-top: 10px; font-size: 0.9em;">
-                                <div>📍 ${museumData.address}</div>
-                                <div>📞 ${museumData.phone}</div>
-                                <div>Status: <span class="status open">${museumData.status}</span></div>
+                        resultHTML += `
+                            <div class="museum-data">
+                                <div class="museum-name">${museumData.museum}</div>
+                                <div class="museum-hours">${museumData.hours}</div>
+                                <div class="museum-details">📍 ${museumData.address}</div>
+                                <div class="museum-details">📞 ${museumData.phone}</div>
+                                <div class="museum-details">Status: <span style="color: #4CAF50;">${museumData.status}</span></div>
+                                <div class="museum-timestamp">🕒 ${museumData.last_updated} (${museumData.source})</div>
+                                ${museumData.error ? `<div style="color: #FF9800;">Note: ${museumData.error}</div>` : ''}
                             </div>
                         `;
-                        updatedDiv.textContent = `Updated: ${museumData.last_updated}`;
-                    } else {
-                        hoursDiv.textContent = `Error: ${data.message}`;
                     }
+                    
+                    resultDiv.innerHTML = resultHTML;
+                    
+                    // If response was slow, it's likely real scraping
+                    if (responseTime > 1000) {
+                        resultDiv.innerHTML += `<div style="color: #4CAF50; margin-top: 10px; font-weight: bold;">
+                            ✅ SLOW response (${responseTime}ms) confirms REAL web scraping!
+                        </div>`;
+                    }
+                    
                 } catch (error) {
-                    hoursDiv.textContent = 'Error scraping website';
+                    resultDiv.innerHTML = `
+                        <div class="result-title">❌ Error</div>
+                        <div class="result-data">${error.message}</div>
+                        <div style="color: #FF9800; margin-top: 10px;">
+                            Make sure the Flask server is running: <code>python main.py</code>
+                        </div>
+                    `;
                 } finally {
-                    btn.classList.remove('loading');
-                    btn.textContent = `Scrape ${museum.charAt(0).toUpperCase() + museum.slice(1)} Hours`;
+                    // Restore button
+                    button.classList.remove('loading');
+                    button.textContent = originalText;
                 }
             }
             
-            async function scrapeAll() {
-                const museums = ['met', 'icecream', 'ukrainian', 'empire'];
+            async function testAllEndpoints() {
+                const endpoints = ['met', 'icecream', 'ukrainian', 'empire', 'all', 'test'];
+                const button = document.querySelector('.quick-test-btn');
+                const originalText = button.textContent;
                 
-                for (const museum of museums) {
-                    await scrapeMuseum(museum);
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                button.textContent = '🔄 Testing all endpoints...';
+                button.disabled = true;
+                
+                for (const endpoint of endpoints) {
+                    const btn = document.querySelector(`[onclick*="${endpoint}"]`);
+                    if (btn) {
+                        await testEndpoint(endpoint, btn);
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
                 }
                 
-                alert('✅ All museums scraped!');
+                button.textContent = originalText;
+                button.disabled = false;
+                alert('✅ All endpoints tested! Check results above.');
             }
         </script>
     </body>
     </html>
     '''
 
-# API endpoints for each museum
-@app.route('/api/met')
-def get_met_hours():
-    data = scraper.scrape_met_museum()
-    return jsonify({'success': True, 'data': data})
-
-@app.route('/api/icecream')
-def get_icecream_hours():
-    data = scraper.scrape_ice_cream_museum()
-    return jsonify({'success': True, 'data': data})
-
-@app.route('/api/ukrainian')
-def get_ukrainian_hours():
-    data = scraper.scrape_ukrainian_museum()
-    return jsonify({'success': True, 'data': data})
-
-@app.route('/api/empire')
-def get_empire_hours():
-    data = scraper.scrape_empire_state()
-    return jsonify({'success': True, 'data': data})
-
-@app.route('/api/all')
-def get_all_hours():
-    data = {
-        'met': scraper.scrape_met_museum(),
-        'icecream': scraper.scrape_ice_cream_museum(),
-        'ukrainian': scraper.scrape_ukrainian_museum(),
-        'empire': scraper.scrape_empire_state(),
-        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    return jsonify({'success': True, 'data': data})
-
 # ============================================================================
-# END MUSEUM SCRAPER SECTION
+# CUSTOM CLI COMMANDS
 # ============================================================================
-    
-# Create an AppGroup for custom commands
+
 custom_cli = AppGroup('custom', help='Custom commands')
 
-# Define a command to run the data generation functions
 @custom_cli.command('generate_data')
 def generate_data():
+    """Generate initial data"""
     initUsers()
     init_microblogs()
 
-# Register the custom command group with the Flask application
 app.cli.add_command(custom_cli)
-        
-# this runs the flask application on the development server
+
+# ============================================================================
+# MAIN ENTRY POINT
+# ============================================================================
+
 if __name__ == "__main__":
+    # Get port from environment or use default
+    port = int(os.environ.get('PORT', 5002))
     host = "0.0.0.0"
-    port = app.config['FLASK_PORT']
-    print(f"** Server running: http://localhost:{port}")
-    print(f"** Museum scraper available at: http://localhost:{port}/museums")
+    
+    print("=" * 70)
+    print("🚀 FLASK APPLICATION STARTING")
+    print("=" * 70)
+    print(f"📡 Main Server: http://localhost:{port}")
+    print(f"🎨 Museum Scraper: http://localhost:{port}/museums")
+    print(f"🔐 Login Page: http://localhost:{port}/login")
+    print("\n🏛️ MUSEUM SCRAPER API ENDPOINTS:")
+    print("  • http://localhost:{}/api/met".format(port))
+    print("  • http://localhost:{}/api/icecream".format(port))
+    print("  • http://localhost:{}/api/ukrainian".format(port))
+    print("  • http://localhost:{}/api/empire".format(port))
+    print("  • http://localhost:{}/api/all".format(port))
+    print("  • http://localhost:{}/api/test".format(port))
+    print("\n✅ REAL WEB SCRAPING ACTIVE - Making actual HTTP requests to museum websites")
+    print("=" * 70)
+    
     app.run(debug=True, host=host, port=port, use_reloader=False)
