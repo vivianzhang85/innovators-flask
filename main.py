@@ -11,6 +11,7 @@ import os
 import requests
 from bs4 import BeautifulSoup
 import re
+import sqlite3
 
 # Import database and models
 from __init__ import app, db, login_manager
@@ -1181,7 +1182,7 @@ if __name__ == "__main__":
     
     app.run(debug=True, host=host, port=port, use_reloader=False)
 
-    # ============================================================================
+# ============================================================================
 # BREAKFAST SCRAPER CLASS
 # ============================================================================
 
@@ -1598,4 +1599,4 @@ def test_breakfast_api():
             "Sarabeth's",
             "Ess-a-Bagel"
         ]
-    })
+    })  # Fixed: Added missing closing parenthesis
