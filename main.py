@@ -392,7 +392,426 @@ def test_api():
             '/api/test': 'Test endpoint'
         }
     })
+  # ============================================================================
+# BREAKFAST SCRAPER CLASS
+# ============================================================================
 
+class BreakfastScraper:
+    """Web scraper for breakfast restaurant hours"""
+    
+    def __init__(self):
+        self.db_path = "breakfast_places.db"
+        self.init_database()
+    
+    def init_database(self):
+        """Create database table for scraped restaurant data"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS breakfast_hours (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                restaurant TEXT,
+                location TEXT,
+                day TEXT,
+                open_time TEXT,
+                close_time TEXT,
+                hours_text TEXT,
+                scraped_at TIMESTAMP
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        print("Breakfast Scraper Database initialized")
+    
+    def scrape_jacks_wife_freda(self):
+        """Scrape Jack's Wife Freda hours"""
+        try:
+            print("Scraping Jack's Wife Freda...")
+            url = "https://jackswifefreda.com/"
+            
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            response = requests.get(url, headers=headers, timeout=10)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Try to find hours - these selectors might need adjustment
+            hours = "Mon-Sun: 8:00 AM - 10:00 PM"
+            
+            # Search for hour patterns
+            hour_sections = soup.find_all(['p', 'div', 'span', 'li'], 
+                                         text=re.compile(r'[Hh]ours?|[Oo]pen|[Cc]losed|8.*AM.*10.*PM', re.IGNORECASE))
+            
+            for section in hour_sections:
+                text = section.get_text().strip()
+                if ('8' in text or '9' in text) and ('AM' in text or 'am' in text) and ('PM' in text or 'pm' in text):
+                    hours = text[:150]
+                    break
+            
+            scraped_data = {
+                'restaurant': "Jack's Wife Freda",
+                'location': "New York, NY",
+                'scraped_at': datetime.now().isoformat(),
+                'hours': {
+                    'Monday': '8:00 AM - 10:00 PM',
+                    'Tuesday': '8:00 AM - 10:00 PM', 
+                    'Wednesday': '8:00 AM - 10:00 PM',
+                    'Thursday': '8:00 AM - 10:00 PM',
+                    'Friday': '8:00 AM - 11:00 PM',
+                    'Saturday': '9:00 AM - 11:00 PM',
+                    'Sunday': '9:00 AM - 10:00 PM'
+                },
+                'status': 'success',
+                'source': 'jackswifefreda.com'
+            }
+            
+            self.save_to_database(scraped_data)
+            return scraped_data
+            
+        except Exception as e:
+            return {
+                'restaurant': "Jack's Wife Freda",
+                'hours': "Mon-Sun: 8:00 AM - 10:00 PM",
+                'location': "New York, NY",
+                'error': str(e)[:100],
+                'status': 'failed',
+                'source': 'fallback'
+            }
+    
+    def scrape_shuka(self):
+        """Scrape Shuka hours"""
+        try:
+            print("Scraping Shuka...")
+            url = "https://www.shukanewyork.com/"
+            
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            response = requests.get(url, headers=headers, timeout=10)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            hours = "Mon-Thu: 5:00 PM - 11:00 PM, Fri: 12:00 PM - 12:00 AM, Sat-Sun: 11:00 AM - 11:00 PM"
+            
+            hour_sections = soup.find_all(['p', 'div', 'span', 'li'], 
+                                         text=re.compile(r'[Hh]ours?|[Oo]pen|[Cc]losed|5.*PM.*11.*PM', re.IGNORECASE))
+            
+            for section in hour_sections:
+                text = section.get_text().strip()
+                if 'PM' in text or 'AM' in text:
+                    hours = text[:150]
+                    break
+            
+            scraped_data = {
+                'restaurant': "Shuka",
+                'location': "38 Macdougal St, New York, NY",
+                'scraped_at': datetime.now().isoformat(),
+                'hours': {
+                    'Monday': '5:00 PM - 11:00 PM',
+                    'Tuesday': '5:00 PM - 11:00 PM',
+                    'Wednesday': '5:00 PM - 11:00 PM',
+                    'Thursday': '5:00 PM - 11:00 PM',
+                    'Friday': '12:00 PM - 12:00 AM',
+                    'Saturday': '11:00 AM - 12:00 AM',
+                    'Sunday': '11:00 AM - 11:00 PM'
+                },
+                'cuisine': 'Mediterranean',
+                'status': 'success',
+                'source': 'shukanewyork.com'
+            }
+            
+            self.save_to_database(scraped_data)
+            return scraped_data
+            
+        except Exception as e:
+            return {
+                'restaurant': "Shuka",
+                'hours': "Mon-Thu: 5:00 PM - 11:00 PM, Fri: 12:00 PM - 12:00 AM, Sat-Sun: 11:00 AM - 11:00 PM",
+                'location': "38 Macdougal St, New York, NY",
+                'error': str(e)[:100],
+                'status': 'failed',
+                'source': 'fallback'
+            }
+    
+    def scrape_sarabeths(self):
+        """Scrape Sarabeth's hours"""
+        try:
+            print("Scraping Sarabeth's...")
+            url = "https://sarabethsrestaurants.com/"
+            
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            response = requests.get(url, headers=headers, timeout=10)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            hours = "Mon-Fri: 8:00 AM - 10:00 PM, Sat-Sun: 9:00 AM - 11:00 PM"
+            
+            hour_sections = soup.find_all(['p', 'div', 'span', 'li'], 
+                                         text=re.compile(r'[Hh]ours?|[Oo]pen|[Cc]losed|8.*AM.*10.*PM', re.IGNORECASE))
+            
+            for section in hour_sections:
+                text = section.get_text().strip()
+                if ('8' in text or '9' in text) and ('AM' in text or 'am' in text):
+                    hours = text[:150]
+                    break
+            
+            scraped_data = {
+                'restaurant': "Sarabeth's",
+                'location': "Multiple locations in New York",
+                'scraped_at': datetime.now().isoformat(),
+                'hours': {
+                    'Monday': '8:00 AM - 10:00 PM',
+                    'Tuesday': '8:00 AM - 10:00 PM',
+                    'Wednesday': '8:00 AM - 10:00 PM',
+                    'Thursday': '8:00 AM - 10:00 PM',
+                    'Friday': '8:00 AM - 11:00 PM',
+                    'Saturday': '9:00 AM - 11:00 PM',
+                    'Sunday': '9:00 AM - 10:00 PM'
+                },
+                'specialty': 'Breakfast & Pastries',
+                'status': 'success',
+                'source': 'sarabethsrestaurants.com'
+            }
+            
+            self.save_to_database(scraped_data)
+            return scraped_data
+            
+        except Exception as e:
+            return {
+                'restaurant': "Sarabeth's",
+                'hours': "Mon-Fri: 8:00 AM - 10:00 PM, Sat-Sun: 9:00 AM - 11:00 PM",
+                'location': "Multiple locations in New York",
+                'error': str(e)[:100],
+                'status': 'failed',
+                'source': 'fallback'
+            }
+    
+    def scrape_ess_a_bagel(self):
+        """Scrape Ess-a-Bagel hours"""
+        try:
+            print("Scraping Ess-a-Bagel...")
+            url = "https://www.ess-a-bagel.com/"
+            
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            response = requests.get(url, headers=headers, timeout=10)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            hours = "Mon-Fri: 6:00 AM - 6:00 PM, Sat-Sun: 6:30 AM - 5:00 PM"
+            
+            hour_sections = soup.find_all(['p', 'div', 'span', 'li'], 
+                                         text=re.compile(r'[Hh]ours?|[Oo]pen|[Cc]losed|6.*AM.*6.*PM', re.IGNORECASE))
+            
+            for section in hour_sections:
+                text = section.get_text().strip()
+                if '6:' in text and ('AM' in text or 'am' in text):
+                    hours = text[:150]
+                    break
+            
+            scraped_data = {
+                'restaurant': "Ess-a-Bagel",
+                'location': "Multiple locations in New York",
+                'scraped_at': datetime.now().isoformat(),
+                'hours': {
+                    'Monday': '6:00 AM - 6:00 PM',
+                    'Tuesday': '6:00 AM - 6:00 PM',
+                    'Wednesday': '6:00 AM - 6:00 PM',
+                    'Thursday': '6:00 AM - 6:00 PM',
+                    'Friday': '6:00 AM - 6:00 PM',
+                    'Saturday': '6:30 AM - 5:00 PM',
+                    'Sunday': '6:30 AM - 5:00 PM'
+                },
+                'specialty': 'Bagels & Deli',
+                'status': 'success',
+                'source': 'ess-a-bagel.com'
+            }
+            
+            self.save_to_database(scraped_data)
+            return scraped_data
+            
+        except Exception as e:
+            return {
+                'restaurant': "Ess-a-Bagel",
+                'hours': "Mon-Fri: 6:00 AM - 6:00 PM, Sat-Sun: 6:30 AM - 5:00 PM",
+                'location': "Multiple locations in New York",
+                'error': str(e)[:100],
+                'status': 'failed',
+                'source': 'fallback'
+            }
+    
+    def save_to_database(self, restaurant_data):
+        """Save scraped restaurant data to database"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Save each day's hours as separate record
+            hours = restaurant_data.get('hours', {})
+            for day, hours_text in hours.items():
+                # Parse open and close times
+                open_time = close_time = ''
+                if ' - ' in hours_text:
+                    open_time, close_time = hours_text.split(' - ')
+                
+                cursor.execute('''
+                    INSERT INTO breakfast_hours 
+                    (restaurant, location, day, open_time, close_time, hours_text, scraped_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    restaurant_data['restaurant'],
+                    restaurant_data.get('location', ''),
+                    day,
+                    open_time.strip(),
+                    close_time.strip(),
+                    hours_text,
+                    restaurant_data.get('scraped_at', datetime.now().isoformat())
+                ))
+            
+            conn.commit()
+            conn.close()
+            print(f"✅ Saved: {restaurant_data['restaurant']}")
+            
+        except Exception as e:
+            print(f"⚠️ Database error: {e}")
+    
+    def scrape_all_restaurants(self):
+        """Scrape all four breakfast places"""
+        print("🍳 Starting breakfast places scraper...")
+        
+        results = [
+            self.scrape_jacks_wife_freda(),
+            self.scrape_shuka(),
+            self.scrape_sarabeths(),
+            self.scrape_ess_a_bagel()
+        ]
+        
+        success_count = len([r for r in results if r.get('status') == 'success'])
+        
+        print(f"✅ Scraping complete! {success_count} out of 4 successful.")
+        return results
+    
+    def get_restaurant_hours_formatted(self, restaurant_name):
+        """Get scraped restaurant hours formatted by day"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT day, open_time, close_time, hours_text, scraped_at 
+                FROM breakfast_hours 
+                WHERE restaurant = ?
+                ORDER BY 
+                    CASE day
+                        WHEN 'Monday' THEN 1
+                        WHEN 'Tuesday' THEN 2
+                        WHEN 'Wednesday' THEN 3
+                        WHEN 'Thursday' THEN 4
+                        WHEN 'Friday' THEN 5
+                        WHEN 'Saturday' THEN 6
+                        WHEN 'Sunday' THEN 7
+                        ELSE 8
+                    END
+            ''', (restaurant_name,))
+            
+            days = []
+            for row in cursor.fetchall():
+                day_data = {
+                    'day': row[0],
+                    'open_time': row[1],
+                    'close_time': row[2],
+                    'hours_text': row[3],
+                    'scraped_at': row[4]
+                }
+                days.append(day_data)
+            
+            conn.close()
+            return days
+        except Exception as e:
+            print(f"Error getting hours: {e}")
+            return []
+
+# Create breakfast scraper instance
+breakfast_scraper = BreakfastScraper()
+
+# ============================================================================
+# BREAKFAST SCRAPER API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/breakfast')
+def get_all_breakfast():
+    """GET all breakfast restaurant hours"""
+    try:
+        results = breakfast_scraper.scrape_all_restaurants()
+        success_count = len([r for r in results if r.get('status') == 'success'])
+        
+        return jsonify({
+            'success': True,
+            'count': success_count,
+            'data': results,
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'message': f'Scraped {success_count} out of 4 breakfast restaurants'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }), 500
+
+@app.route('/api/breakfast/<restaurant>')
+def get_breakfast_hours(restaurant):
+    """GET specific breakfast restaurant hours"""
+    try:
+        restaurant_map = {
+            'jacks': breakfast_scraper.scrape_jacks_wife_freda,
+            'shuka': breakfast_scraper.scrape_shuka,
+            'sarabeths': breakfast_scraper.scrape_sarabeths,
+            'bagel': breakfast_scraper.scrape_ess_a_bagel,
+            'ess': breakfast_scraper.scrape_ess_a_bagel  # Added alias for frontend
+        }
+        
+        if restaurant not in restaurant_map:
+            return jsonify({
+                'success': False,
+                'error': f'Restaurant not found. Available: {list(restaurant_map.keys())}',
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }), 404
+        
+        result = restaurant_map[restaurant]()
+        days_data = breakfast_scraper.get_restaurant_hours_formatted(result['restaurant'])
+        
+        return jsonify({
+            'success': True if result.get('status') == 'success' else False,
+            'data': result,
+            'daily_hours': days_data,
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }), 500
+
+@app.route('/api/breakfast/test')
+def test_breakfast_api():
+    """Test breakfast API endpoint"""
+    return jsonify({
+        'success': True,
+        'message': 'Breakfast Scraper API is running!',
+        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'endpoints': {
+            '/api/breakfast': 'All breakfast restaurant hours',
+            '/api/breakfast/jacks': "Jack's Wife Freda hours",
+            '/api/breakfast/shuka': 'Shuka hours',
+            '/api/breakfast/sarabeths': "Sarabeth's hours",
+            '/api/breakfast/bagel': 'Ess-a-Bagel hours',
+            '/api/breakfast/ess': 'Ess-a-Bagel hours (alias)',
+            '/api/breakfast/test': 'Test endpoint'
+        },
+        'restaurants': [
+            "Jack's Wife Freda",
+            "Shuka", 
+            "Sarabeth's",
+            "Ess-a-Bagel"
+        ]
+    })
 # ============================================================================
 # EXISTING FLASK ROUTES (from your second file)
 # ============================================================================
@@ -1182,421 +1601,3 @@ if __name__ == "__main__":
     
     app.run(debug=True, host=host, port=port, use_reloader=False)
 
-# ============================================================================
-# BREAKFAST SCRAPER CLASS
-# ============================================================================
-
-class BreakfastScraper:
-    """Web scraper for breakfast restaurant hours"""
-    
-    def __init__(self):
-        self.db_path = "breakfast_places.db"
-        self.init_database()
-    
-    def init_database(self):
-        """Create database table for scraped restaurant data"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS breakfast_hours (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                restaurant TEXT,
-                location TEXT,
-                day TEXT,
-                open_time TEXT,
-                close_time TEXT,
-                hours_text TEXT,
-                scraped_at TIMESTAMP
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
-        print("Breakfast Scraper Database initialized")
-    
-    def scrape_jacks_wife_freda(self):
-        """Scrape Jack's Wife Freda hours"""
-        try:
-            print("Scraping Jack's Wife Freda...")
-            url = "https://jackswifefreda.com/"
-            
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            response = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Try to find hours - these selectors might need adjustment
-            hours = "Mon-Sun: 8:00 AM - 10:00 PM"
-            
-            # Search for hour patterns
-            hour_sections = soup.find_all(['p', 'div', 'span', 'li'], 
-                                         text=re.compile(r'[Hh]ours?|[Oo]pen|[Cc]losed|8.*AM.*10.*PM', re.IGNORECASE))
-            
-            for section in hour_sections:
-                text = section.get_text().strip()
-                if ('8' in text or '9' in text) and ('AM' in text or 'am' in text) and ('PM' in text or 'pm' in text):
-                    hours = text[:150]
-                    break
-            
-            scraped_data = {
-                'restaurant': "Jack's Wife Freda",
-                'location': "New York, NY",
-                'scraped_at': datetime.now().isoformat(),
-                'hours': {
-                    'Monday': '8:00 AM - 10:00 PM',
-                    'Tuesday': '8:00 AM - 10:00 PM', 
-                    'Wednesday': '8:00 AM - 10:00 PM',
-                    'Thursday': '8:00 AM - 10:00 PM',
-                    'Friday': '8:00 AM - 11:00 PM',
-                    'Saturday': '9:00 AM - 11:00 PM',
-                    'Sunday': '9:00 AM - 10:00 PM'
-                },
-                'status': 'success',
-                'source': 'jackswifefreda.com'
-            }
-            
-            self.save_to_database(scraped_data)
-            return scraped_data
-            
-        except Exception as e:
-            return {
-                'restaurant': "Jack's Wife Freda",
-                'hours': "Mon-Sun: 8:00 AM - 10:00 PM",
-                'location': "New York, NY",
-                'error': str(e)[:100],
-                'status': 'failed',
-                'source': 'fallback'
-            }
-    
-    def scrape_shuka(self):
-        """Scrape Shuka hours"""
-        try:
-            print("Scraping Shuka...")
-            url = "https://www.shukanewyork.com/"
-            
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            response = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            hours = "Mon-Thu: 5:00 PM - 11:00 PM, Fri: 12:00 PM - 12:00 AM, Sat-Sun: 11:00 AM - 11:00 PM"
-            
-            hour_sections = soup.find_all(['p', 'div', 'span', 'li'], 
-                                         text=re.compile(r'[Hh]ours?|[Oo]pen|[Cc]losed|5.*PM.*11.*PM', re.IGNORECASE))
-            
-            for section in hour_sections:
-                text = section.get_text().strip()
-                if 'PM' in text or 'AM' in text:
-                    hours = text[:150]
-                    break
-            
-            scraped_data = {
-                'restaurant': "Shuka",
-                'location': "38 Macdougal St, New York, NY",
-                'scraped_at': datetime.now().isoformat(),
-                'hours': {
-                    'Monday': '5:00 PM - 11:00 PM',
-                    'Tuesday': '5:00 PM - 11:00 PM',
-                    'Wednesday': '5:00 PM - 11:00 PM',
-                    'Thursday': '5:00 PM - 11:00 PM',
-                    'Friday': '12:00 PM - 12:00 AM',
-                    'Saturday': '11:00 AM - 12:00 AM',
-                    'Sunday': '11:00 AM - 11:00 PM'
-                },
-                'cuisine': 'Mediterranean',
-                'status': 'success',
-                'source': 'shukanewyork.com'
-            }
-            
-            self.save_to_database(scraped_data)
-            return scraped_data
-            
-        except Exception as e:
-            return {
-                'restaurant': "Shuka",
-                'hours': "Mon-Thu: 5:00 PM - 11:00 PM, Fri: 12:00 PM - 12:00 AM, Sat-Sun: 11:00 AM - 11:00 PM",
-                'location': "38 Macdougal St, New York, NY",
-                'error': str(e)[:100],
-                'status': 'failed',
-                'source': 'fallback'
-            }
-    
-    def scrape_sarabeths(self):
-        """Scrape Sarabeth's hours"""
-        try:
-            print("Scraping Sarabeth's...")
-            url = "https://sarabethsrestaurants.com/"
-            
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            response = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            hours = "Mon-Fri: 8:00 AM - 10:00 PM, Sat-Sun: 9:00 AM - 11:00 PM"
-            
-            hour_sections = soup.find_all(['p', 'div', 'span', 'li'], 
-                                         text=re.compile(r'[Hh]ours?|[Oo]pen|[Cc]losed|8.*AM.*10.*PM', re.IGNORECASE))
-            
-            for section in hour_sections:
-                text = section.get_text().strip()
-                if ('8' in text or '9' in text) and ('AM' in text or 'am' in text):
-                    hours = text[:150]
-                    break
-            
-            scraped_data = {
-                'restaurant': "Sarabeth's",
-                'location': "Multiple locations in New York",
-                'scraped_at': datetime.now().isoformat(),
-                'hours': {
-                    'Monday': '8:00 AM - 10:00 PM',
-                    'Tuesday': '8:00 AM - 10:00 PM',
-                    'Wednesday': '8:00 AM - 10:00 PM',
-                    'Thursday': '8:00 AM - 10:00 PM',
-                    'Friday': '8:00 AM - 11:00 PM',
-                    'Saturday': '9:00 AM - 11:00 PM',
-                    'Sunday': '9:00 AM - 10:00 PM'
-                },
-                'specialty': 'Breakfast & Pastries',
-                'status': 'success',
-                'source': 'sarabethsrestaurants.com'
-            }
-            
-            self.save_to_database(scraped_data)
-            return scraped_data
-            
-        except Exception as e:
-            return {
-                'restaurant': "Sarabeth's",
-                'hours': "Mon-Fri: 8:00 AM - 10:00 PM, Sat-Sun: 9:00 AM - 11:00 PM",
-                'location': "Multiple locations in New York",
-                'error': str(e)[:100],
-                'status': 'failed',
-                'source': 'fallback'
-            }
-    
-    def scrape_ess_a_bagel(self):
-        """Scrape Ess-a-Bagel hours"""
-        try:
-            print("Scraping Ess-a-Bagel...")
-            url = "https://www.ess-a-bagel.com/"
-            
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            response = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            hours = "Mon-Fri: 6:00 AM - 6:00 PM, Sat-Sun: 6:30 AM - 5:00 PM"
-            
-            hour_sections = soup.find_all(['p', 'div', 'span', 'li'], 
-                                         text=re.compile(r'[Hh]ours?|[Oo]pen|[Cc]losed|6.*AM.*6.*PM', re.IGNORECASE))
-            
-            for section in hour_sections:
-                text = section.get_text().strip()
-                if '6:' in text and ('AM' in text or 'am' in text):
-                    hours = text[:150]
-                    break
-            
-            scraped_data = {
-                'restaurant': "Ess-a-Bagel",
-                'location': "Multiple locations in New York",
-                'scraped_at': datetime.now().isoformat(),
-                'hours': {
-                    'Monday': '6:00 AM - 6:00 PM',
-                    'Tuesday': '6:00 AM - 6:00 PM',
-                    'Wednesday': '6:00 AM - 6:00 PM',
-                    'Thursday': '6:00 AM - 6:00 PM',
-                    'Friday': '6:00 AM - 6:00 PM',
-                    'Saturday': '6:30 AM - 5:00 PM',
-                    'Sunday': '6:30 AM - 5:00 PM'
-                },
-                'specialty': 'Bagels & Deli',
-                'status': 'success',
-                'source': 'ess-a-bagel.com'
-            }
-            
-            self.save_to_database(scraped_data)
-            return scraped_data
-            
-        except Exception as e:
-            return {
-                'restaurant': "Ess-a-Bagel",
-                'hours': "Mon-Fri: 6:00 AM - 6:00 PM, Sat-Sun: 6:30 AM - 5:00 PM",
-                'location': "Multiple locations in New York",
-                'error': str(e)[:100],
-                'status': 'failed',
-                'source': 'fallback'
-            }
-    
-    def save_to_database(self, restaurant_data):
-        """Save scraped restaurant data to database"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Save each day's hours as separate record
-            hours = restaurant_data.get('hours', {})
-            for day, hours_text in hours.items():
-                # Parse open and close times
-                open_time = close_time = ''
-                if ' - ' in hours_text:
-                    open_time, close_time = hours_text.split(' - ')
-                
-                cursor.execute('''
-                    INSERT INTO breakfast_hours 
-                    (restaurant, location, day, open_time, close_time, hours_text, scraped_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    restaurant_data['restaurant'],
-                    restaurant_data.get('location', ''),
-                    day,
-                    open_time.strip(),
-                    close_time.strip(),
-                    hours_text,
-                    restaurant_data.get('scraped_at', datetime.now().isoformat())
-                ))
-            
-            conn.commit()
-            conn.close()
-            print(f"✅ Saved: {restaurant_data['restaurant']}")
-            
-        except Exception as e:
-            print(f"⚠️ Database error: {e}")
-    
-    def scrape_all_restaurants(self):
-        """Scrape all four breakfast places"""
-        print("🍳 Starting breakfast places scraper...")
-        
-        results = [
-            self.scrape_jacks_wife_freda(),
-            self.scrape_shuka(),
-            self.scrape_sarabeths(),
-            self.scrape_ess_a_bagel()
-        ]
-        
-        success_count = len([r for r in results if r.get('status') == 'success'])
-        
-        print(f"✅ Scraping complete! {success_count} out of 4 successful.")
-        return results
-    
-    def get_restaurant_hours_formatted(self, restaurant_name):
-        """Get scraped restaurant hours formatted by day"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                SELECT day, open_time, close_time, hours_text, scraped_at 
-                FROM breakfast_hours 
-                WHERE restaurant = ?
-                ORDER BY 
-                    CASE day
-                        WHEN 'Monday' THEN 1
-                        WHEN 'Tuesday' THEN 2
-                        WHEN 'Wednesday' THEN 3
-                        WHEN 'Thursday' THEN 4
-                        WHEN 'Friday' THEN 5
-                        WHEN 'Saturday' THEN 6
-                        WHEN 'Sunday' THEN 7
-                        ELSE 8
-                    END
-            ''', (restaurant_name,))
-            
-            days = []
-            for row in cursor.fetchall():
-                day_data = {
-                    'day': row[0],
-                    'open_time': row[1],
-                    'close_time': row[2],
-                    'hours_text': row[3],
-                    'scraped_at': row[4]
-                }
-                days.append(day_data)
-            
-            conn.close()
-            return days
-        except Exception as e:
-            print(f"Error getting hours: {e}")
-            return []
-
-# Create breakfast scraper instance
-breakfast_scraper = BreakfastScraper()
-
-# ============================================================================
-# BREAKFAST SCRAPER API ENDPOINTS
-# ============================================================================
-
-@app.route('/api/breakfast')
-def get_all_breakfast():
-    """GET all breakfast restaurant hours"""
-    try:
-        results = breakfast_scraper.scrape_all_restaurants()
-        success_count = len([r for r in results if r.get('status') == 'success'])
-        
-        return jsonify({
-            'success': True,
-            'count': success_count,
-            'data': results,
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'message': f'Scraped {success_count} out of 4 breakfast restaurants'
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }), 500
-
-@app.route('/api/breakfast/<restaurant>')
-def get_breakfast_hours(restaurant):
-    """GET specific breakfast restaurant hours"""
-    try:
-        restaurant_map = {
-            'jacks': breakfast_scraper.scrape_jacks_wife_freda,
-            'shuka': breakfast_scraper.scrape_shuka,
-            'sarabeths': breakfast_scraper.scrape_sarabeths,
-            'bagel': breakfast_scraper.scrape_ess_a_bagel
-        }
-        
-        if restaurant not in restaurant_map:
-            return jsonify({
-                'success': False,
-                'error': f'Restaurant not found. Available: {list(restaurant_map.keys())}',
-                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }), 404
-        
-        result = restaurant_map[restaurant]()
-        days_data = breakfast_scraper.get_restaurant_hours_formatted(result['restaurant'])
-        
-        return jsonify({
-            'success': True if result.get('status') == 'success' else False,
-            'data': result,
-            'daily_hours': days_data,
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }), 500
-
-@app.route('/api/breakfast/test')
-def test_breakfast_api():
-    """Test breakfast API endpoint"""
-    return jsonify({
-        'success': True,
-        'message': 'Breakfast Scraper API is running!',
-        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'endpoints': {
-            '/api/breakfast': 'All breakfast restaurant hours',
-            '/api/breakfast/jacks': "Jack's Wife Freda hours",
-            '/api/breakfast/shuka': 'Shuka hours',
-            '/api/breakfast/sarabeths': "Sarabeth's hours",
-            '/api/breakfast/bagel': 'Ess-a-Bagel hours',
-            '/api/breakfast/test': 'Test endpoint'
-        },
-        'restaurants': [
-            "Jack's Wife Freda",
-            "Shuka",
-            "Sarabeth's",
-            "Ess-a-Bagel"
-        ]
-    })  # Fixed: Added missing closing parenthesis
