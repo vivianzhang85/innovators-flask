@@ -727,6 +727,7 @@ class BreakfastScraper:
 
 # Create breakfast scraper instance
 breakfast_scraper = BreakfastScraper()
+# Create Broadway scraper instance
 
 # ============================================================================
 # BREAKFAST SCRAPER API ENDPOINTS
@@ -812,6 +813,277 @@ def test_breakfast_api():
             "Ess-a-Bagel"
         ]
     })
+# ============================================================================
+# BROADWAY SHOW SCRAPER CLASS
+# ============================================================================
+
+class BroadwayScraper:
+    """Web scraper for Broadway show availability"""
+    
+    def __init__(self):
+        self.db_path = "broadway_shows.db"
+        self.init_database()
+    
+    def init_database(self):
+        """Create database table for scraped Broadway data"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS broadway_shows (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                show_name TEXT,
+                show_date TEXT,
+                price_range TEXT,
+                status TEXT,
+                scraped_at TIMESTAMP,
+                show_day TEXT,
+                show_month TEXT,
+                show_year TEXT
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        print("Broadway Scraper Database initialized")
+    
+    def scrape_broadway_availability(self, start_date="2026-06-05", end_date="2026-06-09", quantity=2):
+        """
+        Scrape Broadway.com show availability data for the specified date range
+        """
+        try:
+            print("🎭 Scraping Broadway.com shows...")
+            url = f"https://www.broadway.com/shows/find-by-date/?query=&start_date={start_date}&end_date={end_date}&quantity={quantity}"
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Extract the main content
+            content_text = soup.get_text()
+            
+            # Parse the content to extract show information
+            performances = []
+            
+            # Simple parsing logic based on the actual content structure
+            lines = content_text.split('\n')
+            current_date = None
+            
+            for i, line in enumerate(lines):
+                line = line.strip()
+                
+                # Check for date indicators (e.g., "FriJun 5")
+                if 'FriJun' in line or 'SatJun' in line or 'SunJun' in line or 'MonJun' in line or 'TueJun' in line:
+                    current_date = line
+                    continue
+                
+                # Check for price ranges (e.g., "from $96.00 - $484.24")
+                if line.startswith('from $') and '-' in line:
+                    status = 'Available'
+                    
+                    # Check if next line says "No scheduled performances"
+                    if i + 1 < len(lines) and 'No scheduled performances' in lines[i + 1].strip():
+                        status = 'No shows'
+                    
+                    performance_data = {
+                        'show_date': current_date,
+                        'price_range': line,
+                        'status': status,
+                        'show_name': 'Broadway Show'  # Default since show names aren't in the HTML
+                    }
+                    performances.append(performance_data)
+                    
+                    # Save to database
+                    self.save_to_database(performance_data)
+            
+            # If no structured data found, look for all price ranges
+            if not performances:
+                price_pattern = re.compile(r'from \$[\d\.]+ - \$[\d\.]+')
+                price_matches = price_pattern.findall(content_text)
+                
+                for price in price_matches:
+                    performance_data = {
+                        'show_date': 'Unknown',
+                        'price_range': price,
+                        'status': 'Available',
+                        'show_name': 'Broadway Show'
+                    }
+                    performances.append(performance_data)
+                    self.save_to_database(performance_data)
+            
+            scraped_data = {
+                'source': 'broadway.com',
+                'date_range': f'{start_date} to {end_date}',
+                'ticket_quantity': quantity,
+                'performances': performances,
+                'total_found': len(performances),
+                'scraped_at': datetime.now().isoformat(),
+                'status': 'success'
+            }
+            
+            print(f"✅ Found {len(performances)} Broadway performance entries")
+            return scraped_data
+            
+        except Exception as e:
+            print(f"❌ Error scraping Broadway: {e}")
+            return {
+                'source': 'broadway.com',
+                'error': str(e)[:100],
+                'performances': [],
+                'total_found': 0,
+                'scraped_at': datetime.now().isoformat(),
+                'status': 'failed'
+            }
+    
+    def save_to_database(self, performance_data):
+        """Save scraped Broadway data to database"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Extract date components from show_date
+            show_date = performance_data.get('show_date', '')
+            show_day = show_month = show_year = ''
+            
+            if show_date:
+                # Parse "FriJun 5" format
+                match = re.match(r'([A-Za-z]{3})([A-Za-z]{3})\s+(\d+)', show_date)
+                if match:
+                    show_day = match.group(1)  # "Fri"
+                    show_month = match.group(2)  # "Jun"
+                    show_year = "2026"  # Assuming 2026 from URL
+            
+            cursor.execute('''
+                INSERT INTO broadway_shows 
+                (show_name, show_date, price_range, status, scraped_at, show_day, show_month, show_year)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                performance_data.get('show_name', ''),
+                performance_data.get('show_date', ''),
+                performance_data.get('price_range', ''),
+                performance_data.get('status', ''),
+                datetime.now().isoformat(),
+                show_day,
+                show_month,
+                show_year
+            ))
+            
+            conn.commit()
+            conn.close()
+            
+        except Exception as e:
+            print(f"⚠️ Broadway database error: {e}")
+    
+    def get_recent_shows(self, limit=50):
+        """Get recently scraped Broadway shows from database"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT show_name, show_date, price_range, status, scraped_at 
+                FROM broadway_shows 
+                ORDER BY scraped_at DESC 
+                LIMIT ?
+            ''', (limit,))
+            
+            shows = []
+            for row in cursor.fetchall():
+                show_data = {
+                    'show_name': row[0],
+                    'show_date': row[1],
+                    'price_range': row[2],
+                    'status': row[3],
+                    'scraped_at': row[4]
+                }
+                shows.append(show_data)
+            
+            conn.close()
+            return shows
+        except Exception as e:
+            print(f"Error getting Broadway shows: {e}")
+            return []
+broadway_scraper = BroadwayScraper()    
+# ============================================================================
+# BROADWAY SCRAPER API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/broadway')
+def get_broadway_availability():
+    """GET Broadway show availability"""
+    try:
+        # Get parameters from query string or use defaults
+        start_date = request.args.get('start_date', '2026-06-05')
+        end_date = request.args.get('end_date', '2026-06-09')
+        quantity = request.args.get('quantity', 2, type=int)
+        
+        result = broadway_scraper.scrape_broadway_availability(
+            start_date=start_date,
+            end_date=end_date,
+            quantity=quantity
+        )
+        
+        # Get recent shows from database for context
+        recent_shows = broadway_scraper.get_recent_shows(limit=20)
+        
+        return jsonify({
+            'success': result.get('status') == 'success',
+            'data': result,
+            'recent_shows': recent_shows,
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'message': f'Found {result.get("total_found", 0)} Broadway performance(s)'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }), 500
+
+@app.route('/api/broadway/history')
+def get_broadway_history():
+    """GET historical Broadway data from database"""
+    try:
+        limit = request.args.get('limit', 100, type=int)
+        shows = broadway_scraper.get_recent_shows(limit=limit)
+        
+        return jsonify({
+            'success': True,
+            'data': shows,
+            'count': len(shows),
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }), 500
+
+@app.route('/api/broadway/test')
+def test_broadway_api():
+    """Test Broadway API endpoint"""
+    return jsonify({
+        'success': True,
+        'message': 'Broadway Scraper API is running!',
+        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'endpoints': {
+            '/api/broadway': 'Scrape Broadway availability (default: June 5-9, 2026)',
+            '/api/broadway?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&quantity=N': 'Custom date range',
+            '/api/broadway/history': 'Get scraped data from database',
+            '/api/broadway/test': 'Test endpoint'
+        },
+        'parameters': {
+            'start_date': 'YYYY-MM-DD format',
+            'end_date': 'YYYY-MM-DD format',
+            'quantity': 'Number of tickets (default: 2)'
+        }
+    })    
 # ============================================================================
 # EXISTING FLASK ROUTES (from your second file)
 # ============================================================================
@@ -1598,6 +1870,9 @@ if __name__ == "__main__":
     print("  • http://localhost:{}/api/test".format(port))
     print("\n✅ REAL WEB SCRAPING ACTIVE - Making actual HTTP requests to museum websites")
     print("=" * 70)
-    
+    print("\n🎭 BROADWAY SCRAPER API ENDPOINTS:")
+    print("  • http://localhost:{}/api/broadway".format(port))
+    print("  • http://localhost:{}/api/broadway/history".format(port))
+    print("  • http://localhost:{}/api/broadway/test".format(port))
     app.run(debug=True, host=host, port=port, use_reloader=False)
 
