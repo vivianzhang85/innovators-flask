@@ -1,7 +1,10 @@
 version: '3.8'
 
 services:
-  app:
+      web:
+        ports:
+                - "8303:8303"
+app:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile.dev

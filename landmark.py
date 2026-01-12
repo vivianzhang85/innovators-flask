@@ -416,7 +416,7 @@ def get_all_hours():
     return jsonify({'success': True, 'data': data})
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5002))
+    port = int(os.environ.get('PORT', 8303))
     print(f"🏛️  Museum Hours Scraper")
     print(f"🌐 Starting server on http://localhost:{port}")
     print("\nFour Museum Scrapers:")
