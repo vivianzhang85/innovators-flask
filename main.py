@@ -1715,7 +1715,7 @@ def museums_home():
                             <div class="endpoint-description">The Metropolitan Museum of Art</div>
                         </div>
                     </div>
-                    <div class="endpoint-url">GET http://localhost:8587/api/met</div>
+                    <div class="endpoint-url">GET http://localhost:8303/api/met</div>
                     <div class="endpoint-description">
                         Scrapes hours from metmuseum.org using BeautifulSoup. Returns address, phone, and real-time hours.
                     </div>
@@ -1733,7 +1733,7 @@ def museums_home():
                             <div class="endpoint-description">Museum of Ice Cream NYC</div>
                         </div>
                     </div>
-                    <div class="endpoint-url">GET http://localhost:8587/api/icecream</div>
+                    <div class="endpoint-url">GET http://localhost:8303/api/icecream</div>
                     <div class="endpoint-description">
                         Scrapes hours from museumoficecream.com using regex patterns. Returns fun, colorful data.
                     </div>
@@ -1751,7 +1751,7 @@ def museums_home():
                             <div class="endpoint-description">Ukrainian Museum NYC</div>
                         </div>
                     </div>
-                    <div class="endpoint-url">GET http://localhost:8587/api/ukrainian</div>
+                    <div class="endpoint-url">GET http://localhost:8303/api/ukrainian</div>
                     <div class="endpoint-description">
                         Scrapes hours from ukrainianmuseum.org. Returns cultural heritage information.
                     </div>
@@ -1769,7 +1769,7 @@ def museums_home():
                             <div class="endpoint-description">Empire State Building Observatory</div>
                         </div>
                     </div>
-                    <div class="endpoint-url">GET http://localhost:8587/api/empire</div>
+                    <div class="endpoint-url">GET http://localhost:8303/api/empire</div>
                     <div class="endpoint-description">
                         Scrapes hours from esbnyc.com. Returns iconic NYC landmark hours.
                     </div>
@@ -1787,7 +1787,7 @@ def museums_home():
                             <div class="endpoint-description">Get all museum data at once</div>
                         </div>
                     </div>
-                    <div class="endpoint-url">GET http://localhost:8587/api/all</div>
+                    <div class="endpoint-url">GET http://localhost:8303/api/all</div>
                     <div class="endpoint-description">
                         Returns hours for all 4 museums in a single request. Perfect for dashboards.
                     </div>
@@ -1805,7 +1805,7 @@ def museums_home():
                             <div class="endpoint-description">Verify API is working</div>
                         </div>
                     </div>
-                    <div class="endpoint-url">GET http://localhost:8587/api/test</div>
+                    <div class="endpoint-url">GET http://localhost:8303/api/test</div>
                     <div class="endpoint-description">
                         Simple endpoint to verify the API server is running and list all available endpoints.
                     </div>
@@ -1833,7 +1833,7 @@ def museums_home():
                     <pre style="background: #1a1a1a; color: #4CAF50; padding: 15px; border-radius: 8px; overflow-x: auto;">
 // JavaScript fetch example:
 async function fetchMuseumHours(museum) {
-    const response = await fetch('http://localhost:8587/api/' + museum);
+    const response = await fetch('http://localhost:8303/api/' + museum);
     const data = await response.json();
     return data.data;
 }
@@ -1967,7 +1967,7 @@ app.cli.add_command(custom_cli)
 
 if __name__ == "__main__":
     # Get port from environment or use default
-    port = int(os.environ.get('PORT', 8587))
+    port = int(os.environ.get('PORT', 8303))
     host = "0.0.0.0"
     
     print("=" * 70)
