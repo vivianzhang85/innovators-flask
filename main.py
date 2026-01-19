@@ -51,7 +51,11 @@ from hacks.jokes import initJokes
 load_dotenv()
 
 # Initialize CORS for all origins
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, 
+     resources={r"/*": {"origins": "*"}},
+     supports_credentials=True,
+     allow_headers=["Content-Type", "Authorization", "X-Origin"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
 
 # Configuration
 app.config['KASM_SERVER'] = os.getenv('KASM_SERVER')
