@@ -3,9 +3,10 @@ from flask import Blueprint, app, request, jsonify, current_app, Response, g
 from flask_restful import Api, Resource # used for REST API building
 from datetime import datetime
 from __init__ import app, db
-from api.jwt_authorize import token_required
+from api.authorize import token_required
 from model.user import User
 from model.github import GitHubUser
+import os
 
 user_api = Blueprint('user_api', __name__,
                    url_prefix='/api')
@@ -19,8 +20,13 @@ class UserAPI:
         def get(self):
             ''' Retrieve the current user from the token_required authentication check '''
             current_user = g.current_user
-            ''' Return the current user as a json object '''
-            return jsonify(current_user.read())
+            ''' Return the current user as a json object with role information '''
+            user_data = current_user.read()
+            # Add role information to response
+            user_data['role'] = current_user.role
+            user_data['is_admin'] = current_user.is_admin()
+            user_data['is_teacher'] = current_user.is_teacher()
+            return jsonify(user_data)
     
     class _BULK(Resource):  # Users API operation for Create, Read, Update, Delete 
         def post(self):
@@ -358,7 +364,7 @@ class UserAPI:
                             algorithm="HS256"
                         )
                         # Return JSON response with cookie
-                        is_production = not (request.host.startswith('localhost') or request.host.startswith('127.0.0.1'))
+                        is_production = os.environ.get('IS_PRODUCTION', 'false').lower() == 'true'
                         
                         # Create JSON response
                         response_data = {
@@ -381,7 +387,8 @@ class UserAPI:
                                 secure=True,
                                 httponly=True,
                                 path='/',
-                                samesite='None'
+                                samesite='None',
+                                domain='.opencodingsociety.com'
                             )
                         else:
                             resp.set_cookie(
@@ -428,7 +435,7 @@ class UserAPI:
                 
                 # Prepare a response indicating the token has been invalidated
                 resp = Response("Token invalidated successfully")
-                is_production = not (request.host.startswith('localhost') or request.host.startswith('127.0.0.1'))
+                is_production = os.environ.get('IS_PRODUCTION', 'false').lower() == 'true'
                 if is_production:
                     resp.set_cookie(
                         current_app.config["JWT_TOKEN_NAME"],
@@ -437,7 +444,9 @@ class UserAPI:
                         secure=True,
                         httponly=True,
                         path='/',
-                        samesite='None'
+                        samesite='None',
+                        domain='.opencodingsociety.com'
+                
                     )
                 else:
                     resp.set_cookie(
