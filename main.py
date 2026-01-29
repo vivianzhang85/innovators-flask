@@ -103,6 +103,71 @@ def load_user(user_id):
 @app.context_processor
 def inject_user():
     return dict(current_user=current_user)
+@app.route('/api/id')
+def get_user_id():
+    """Get current user information for frontend login system"""
+    try:
+        if current_user.is_authenticated:
+            # Prepare user data for frontend
+            user_data = {
+                'id': current_user.id,
+                'uid': current_user.uid,
+                'name': current_user.name if hasattr(current_user, 'name') else current_user.uid,
+                'roles': [role.to_dict() for role in current_user.roles] if hasattr(current_user, 'roles') else [],
+                'is_authenticated': True
+            }
+            return jsonify(user_data)
+        else:
+            # User is not logged in
+            return jsonify({
+                'is_authenticated': False,
+                'message': 'Not authenticated'
+            })
+    except Exception as e:
+        print(f"Error in /api/id: {e}")
+        return jsonify({
+            'is_authenticated': False,
+            'error': str(e)
+        })
+
+@app.route('/api/user/class')
+@login_required
+def get_user_classes():
+    """Get classes for the current user"""
+    try:
+        # Assuming you have a relationship between User and Classroom
+        # This depends on your User model structure
+        
+        # Option 1: If you have a direct relationship
+        if hasattr(current_user, 'classes'):
+            classes = [cls.name for cls in current_user.classes]
+            return jsonify({
+                'success': True,
+                'class': classes
+            })
+        
+        # Option 2: If you have a class attribute
+        elif hasattr(current_user, '_class'):
+            # Assuming _class is a comma-separated string like "CSSE,CSP,CSA"
+            class_list = current_user._class.split(',') if current_user._class else []
+            return jsonify({
+                'success': True,
+                'class': [cls.strip() for cls in class_list]
+            })
+        
+        # Option 3: Default fallback
+        else:
+            return jsonify({
+                'success': True,
+                'class': []
+            })
+            
+    except Exception as e:
+        print(f"Error in /api/user/class: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 # ============================================================================
 # MUSEUM SCRAPER CLASS
@@ -1207,11 +1272,11 @@ def test_broadway_api():
         }
     })
 # ============================================================================
-# ITINERARY DATABASE CLASS
+# ITINERARY DATABASE CLASS - UPDATED FOR USER AUTHENTICATION
 # ============================================================================
 
 class ItineraryStorage:
-    """Database storage for itinerary choices (backend replacement for localStorage)"""
+    """Database storage for itinerary choices with user authentication support"""
     
     def __init__(self):
         self.db_path = "itinerary_storage.db"
@@ -1222,11 +1287,11 @@ class ItineraryStorage:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Main itinerary table
+        # Main itinerary table with user_id for authentication
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS itinerary (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id TEXT NOT NULL,
+                session_id TEXT,
                 user_id INTEGER,
                 trip_info TEXT,
                 breakfast TEXT,
@@ -1234,60 +1299,76 @@ class ItineraryStorage:
                 shopping TEXT,
                 broadway TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id) ON CONFLICT REPLACE  -- One itinerary per user
             )
         ''')
         
-        # Create index for faster lookups
+        # Create indexes for faster lookups
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_session_id ON itinerary(session_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_id ON itinerary(user_id)')
         
         conn.commit()
         conn.close()
-        print("✅ Itinerary Storage Database initialized")
+        print("✅ Itinerary Storage Database initialized with user authentication support")
     
     def create_session(self):
         """Create a new session ID"""
-        import uuid
-        session_id = str(uuid.uuid4())
-        return session_id
+        return str(uuid.uuid4())
     
-    def save_itinerary(self, session_id, itinerary_data):
-        """Save or update itinerary data for a session"""
+    def save_itinerary(self, session_id, itinerary_data, user_id=None):
+        """Save or update itinerary data for a session or user"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            # Check if session exists
-            cursor.execute('SELECT id FROM itinerary WHERE session_id = ?', (session_id,))
-            existing = cursor.fetchone()
+            # Check if user already has an itinerary
+            existing_id = None
+            if user_id:
+                cursor.execute('SELECT id FROM itinerary WHERE user_id = ?', (user_id,))
+                existing_user = cursor.fetchone()
+                if existing_user:
+                    existing_id = existing_user[0]
             
-            if existing:
+            # If no user itinerary, check by session
+            if not existing_id and session_id:
+                cursor.execute('SELECT id FROM itinerary WHERE session_id = ?', (session_id,))
+                existing_session = cursor.fetchone()
+                if existing_session:
+                    existing_id = existing_session[0]
+            
+            if existing_id:
                 # Update existing record
                 cursor.execute('''
                     UPDATE itinerary SET 
+                        session_id = COALESCE(?, session_id),
+                        user_id = COALESCE(?, user_id),
                         trip_info = ?,
                         breakfast = ?,
                         landmarks = ?,
                         shopping = ?,
                         broadway = ?,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE session_id = ?
+                    WHERE id = ?
                 ''', (
+                    session_id,
+                    user_id,
                     json.dumps(itinerary_data.get('trip_info')) if itinerary_data.get('trip_info') else None,
                     json.dumps(itinerary_data.get('breakfast')) if itinerary_data.get('breakfast') else None,
                     json.dumps(itinerary_data.get('landmarks')) if itinerary_data.get('landmarks') else None,
                     json.dumps(itinerary_data.get('shopping')) if itinerary_data.get('shopping') else None,
                     json.dumps(itinerary_data.get('broadway')) if itinerary_data.get('broadway') else None,
-                    session_id
+                    existing_id
                 ))
             else:
                 # Insert new record
                 cursor.execute('''
                     INSERT INTO itinerary 
-                    (session_id, trip_info, breakfast, landmarks, shopping, broadway)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    (session_id, user_id, trip_info, breakfast, landmarks, shopping, broadway)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     session_id,
+                    user_id,
                     json.dumps(itinerary_data.get('trip_info')) if itinerary_data.get('trip_info') else None,
                     json.dumps(itinerary_data.get('breakfast')) if itinerary_data.get('breakfast') else None,
                     json.dumps(itinerary_data.get('landmarks')) if itinerary_data.get('landmarks') else None,
@@ -1301,6 +1382,7 @@ class ItineraryStorage:
             return {
                 'success': True,
                 'session_id': session_id,
+                'user_id': user_id,
                 'message': 'Itinerary saved successfully'
             }
             
@@ -1311,18 +1393,33 @@ class ItineraryStorage:
                 'error': str(e)
             }
     
-    def get_itinerary(self, session_id):
-        """Get itinerary data for a session"""
+    def get_itinerary(self, session_id=None, user_id=None):
+        """Get itinerary data for a session or user"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            cursor.execute('''
+            query = '''
                 SELECT trip_info, breakfast, landmarks, shopping, broadway, created_at, updated_at
                 FROM itinerary 
-                WHERE session_id = ?
-            ''', (session_id,))
+                WHERE 1=1
+            '''
+            params = []
             
+            if user_id:
+                query += ' AND user_id = ?'
+                params.append(user_id)
+            elif session_id:
+                query += ' AND session_id = ?'
+                params.append(session_id)
+            else:
+                conn.close()
+                return {
+                    'success': False,
+                    'error': 'No session_id or user_id provided'
+                }
+            
+            cursor.execute(query, params)
             row = cursor.fetchone()
             conn.close()
             
@@ -1341,6 +1438,7 @@ class ItineraryStorage:
                 return {
                     'success': True,
                     'session_id': session_id,
+                    'user_id': user_id,
                     'data': itinerary_data
                 }
             else:
@@ -1348,6 +1446,7 @@ class ItineraryStorage:
                 return {
                     'success': True,
                     'session_id': session_id,
+                    'user_id': user_id,
                     'data': {
                         'trip_info': None,
                         'breakfast': None,
@@ -1366,30 +1465,54 @@ class ItineraryStorage:
                 'error': str(e)
             }
     
-    def update_section(self, session_id, section_name, section_data):
+    def update_section(self, session_id=None, user_id=None, section_name=None, section_data=None):
         """Update a specific section of the itinerary"""
         try:
+            # Validate section name
+            valid_sections = ['trip_info', 'breakfast', 'landmarks', 'shopping', 'broadway']
+            if section_name not in valid_sections:
+                return {
+                    'success': False,
+                    'error': f'Invalid section. Must be one of: {", ".join(valid_sections)}'
+                }
+            
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            # Check if session exists
-            cursor.execute('SELECT id FROM itinerary WHERE session_id = ?', (session_id,))
+            # Check if itinerary exists
+            query = 'SELECT id FROM itinerary WHERE '
+            params = []
+            
+            if user_id:
+                query += 'user_id = ?'
+                params.append(user_id)
+            elif session_id:
+                query += 'session_id = ?'
+                params.append(session_id)
+            else:
+                conn.close()
+                return {
+                    'success': False,
+                    'error': 'No session_id or user_id provided'
+                }
+            
+            cursor.execute(query, params)
             existing = cursor.fetchone()
             
             if not existing:
                 # Create new record with just this section
                 cursor.execute(f'''
-                    INSERT INTO itinerary (session_id, {section_name})
-                    VALUES (?, ?)
-                ''', (session_id, json.dumps(section_data) if section_data else None))
+                    INSERT INTO itinerary (session_id, user_id, {section_name})
+                    VALUES (?, ?, ?)
+                ''', (session_id, user_id, json.dumps(section_data) if section_data else None))
             else:
                 # Update specific section
                 cursor.execute(f'''
                     UPDATE itinerary SET 
                         {section_name} = ?,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE session_id = ?
-                ''', (json.dumps(section_data) if section_data else None, session_id))
+                    WHERE id = ?
+                ''', (json.dumps(section_data) if section_data else None, existing[0]))
             
             conn.commit()
             conn.close()
@@ -1397,6 +1520,7 @@ class ItineraryStorage:
             return {
                 'success': True,
                 'session_id': session_id,
+                'user_id': user_id,
                 'section': section_name,
                 'message': f'{section_name} updated successfully'
             }
@@ -1408,13 +1532,13 @@ class ItineraryStorage:
                 'error': str(e)
             }
     
-    def clear_itinerary(self, session_id):
-        """Clear all itinerary data for a session"""
+    def clear_itinerary(self, session_id=None, user_id=None):
+        """Clear all itinerary data for a session or user"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            cursor.execute('''
+            query = '''
                 UPDATE itinerary SET 
                     trip_info = NULL,
                     breakfast = NULL,
@@ -1422,15 +1546,31 @@ class ItineraryStorage:
                     shopping = NULL,
                     broadway = NULL,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE session_id = ?
-            ''', (session_id,))
+                WHERE 1=1
+            '''
+            params = []
             
+            if user_id:
+                query += ' AND user_id = ?'
+                params.append(user_id)
+            elif session_id:
+                query += ' AND session_id = ?'
+                params.append(session_id)
+            else:
+                conn.close()
+                return {
+                    'success': False,
+                    'error': 'No session_id or user_id provided'
+                }
+            
+            cursor.execute(query, params)
             conn.commit()
             conn.close()
             
             return {
                 'success': True,
                 'session_id': session_id,
+                'user_id': user_id,
                 'message': 'Itinerary cleared successfully'
             }
             
@@ -1441,68 +1581,80 @@ class ItineraryStorage:
                 'error': str(e)
             }
     
-    def delete_session(self, session_id):
-        """Delete an entire session"""
+    def delete_itinerary(self, session_id=None, user_id=None):
+        """Delete an entire itinerary"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            cursor.execute('DELETE FROM itinerary WHERE session_id = ?', (session_id,))
+            query = 'DELETE FROM itinerary WHERE '
+            params = []
             
+            if user_id:
+                query += 'user_id = ?'
+                params.append(user_id)
+            elif session_id:
+                query += 'session_id = ?'
+                params.append(session_id)
+            else:
+                conn.close()
+                return {
+                    'success': False,
+                    'error': 'No session_id or user_id provided'
+                }
+            
+            cursor.execute(query, params)
             conn.commit()
             conn.close()
             
             return {
                 'success': True,
                 'session_id': session_id,
-                'message': 'Session deleted successfully'
+                'user_id': user_id,
+                'message': 'Itinerary deleted successfully'
             }
             
         except Exception as e:
-            print(f"❌ Error deleting session: {e}")
+            print(f"❌ Error deleting itinerary: {e}")
             return {
                 'success': False,
                 'error': str(e)
             }
     
-    def get_all_sessions(self, limit=100):
-        """Get all sessions (for admin purposes)"""
+    def merge_sessions(self, from_session_id, to_user_id):
+        """Merge session-based itinerary into user account"""
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
+            # Get session itinerary
+            session_result = self.get_itinerary(session_id=from_session_id)
+            if not session_result['success']:
+                return session_result
             
-            cursor.execute('''
-                SELECT session_id, trip_info, breakfast, landmarks, shopping, broadway, 
-                       created_at, updated_at
-                FROM itinerary 
-                ORDER BY updated_at DESC 
-                LIMIT ?
-            ''', (limit,))
+            session_data = session_result['data']
             
-            sessions = []
-            for row in cursor.fetchall():
-                session_data = {
-                    'session_id': row[0],
-                    'trip_info': json.loads(row[1]) if row[1] else None,
-                    'breakfast': json.loads(row[2]) if row[2] else None,
-                    'landmarks': json.loads(row[3]) if row[3] else None,
-                    'shopping': json.loads(row[4]) if row[4] else None,
-                    'broadway': json.loads(row[5]) if row[5] else None,
-                    'created_at': row[6],
-                    'updated_at': row[7]
-                }
-                sessions.append(session_data)
+            # Get user itinerary (if any)
+            user_result = self.get_itinerary(user_id=to_user_id)
             
-            conn.close()
+            # Merge data - session data takes precedence
+            merged_data = {}
+            sections = ['trip_info', 'breakfast', 'landmarks', 'shopping', 'broadway']
             
-            return {
-                'success': True,
-                'count': len(sessions),
-                'sessions': sessions
-            }
+            if user_result['success']:
+                user_data = user_result['data']
+                for section in sections:
+                    # Use session data if it exists, otherwise keep user data
+                    if session_data.get(section):
+                        merged_data[section] = session_data[section]
+                    else:
+                        merged_data[section] = user_data.get(section)
+            else:
+                # No user data, use session data
+                merged_data = session_data
+            
+            # Save merged data to user account
+            return self.save_itinerary(None, merged_data, to_user_id)
             
         except Exception as e:
-            print(f"❌ Error getting sessions: {e}")
+            print(f"❌ Error merging sessions: {e}")
             return {
                 'success': False,
                 'error': str(e)
@@ -1512,21 +1664,53 @@ class ItineraryStorage:
 itinerary_storage = ItineraryStorage()
 
 # ============================================================================
-# ITINERARY STORAGE API ENDPOINTS
+# ITINERARY STORAGE API ENDPOINTS - UPDATED FOR USER AUTH
 # ============================================================================
 
 @app.route('/api/itinerary', methods=['GET'])
 def get_itinerary():
-    """GET itinerary for current session"""
+    """GET itinerary for current session or logged-in user"""
     try:
-        # Get or create session ID from cookie
+        # Get user ID if logged in
+        user_id = None
+        if current_user.is_authenticated:
+            user_id = current_user.id
+        
+        # Get session ID from cookie
         session_id = request.cookies.get('itinerary_session_id')
         
+        # Priority: User account > Session
+        if user_id:
+            # Try to get user's itinerary
+            result = itinerary_storage.get_itinerary(user_id=user_id)
+            if result['success']:
+                # Check if user has any data
+                user_data = result['data']
+                has_user_data = any([
+                    user_data.get('trip_info'),
+                    user_data.get('breakfast'),
+                    user_data.get('landmarks'),
+                    user_data.get('shopping'),
+                    user_data.get('broadway')
+                ])
+                
+                if has_user_data:
+                    return jsonify({
+                        'success': True,
+                        'user_id': user_id,
+                        'session_id': session_id,
+                        'data': user_data,
+                        'source': 'user_account',
+                        'message': 'Loaded from user account'
+                    })
+        
+        # If no user data or user not logged in, check session
         if not session_id:
             # Create new session
             session_id = itinerary_storage.create_session()
             response = jsonify({
                 'success': True,
+                'user_id': user_id,
                 'session_id': session_id,
                 'data': {
                     'trip_info': None,
@@ -1535,16 +1719,19 @@ def get_itinerary():
                     'shopping': None,
                     'broadway': None
                 },
+                'source': 'new_session',
                 'message': 'New session created'
             })
             # Set session cookie
-            response.set_cookie('itinerary_session_id', session_id, max_age=30*24*60*60)  # 30 days
+            response.set_cookie('itinerary_session_id', session_id, max_age=30*24*60*60)
             return response
         
-        # Get existing itinerary
-        result = itinerary_storage.get_itinerary(session_id)
+        # Get session itinerary
+        result = itinerary_storage.get_itinerary(session_id=session_id)
         
         if result['success']:
+            result['user_id'] = user_id
+            result['source'] = 'session'
             return jsonify(result)
         else:
             return jsonify({
@@ -1564,6 +1751,11 @@ def get_itinerary():
 def save_itinerary():
     """Save or update entire itinerary"""
     try:
+        # Get user ID if logged in
+        user_id = None
+        if current_user.is_authenticated:
+            user_id = current_user.id
+        
         # Get session ID
         session_id = request.cookies.get('itinerary_session_id')
         if not session_id:
@@ -1577,8 +1769,8 @@ def save_itinerary():
                 'error': 'No itinerary data provided'
             }), 400
         
-        # Save itinerary
-        result = itinerary_storage.save_itinerary(session_id, data)
+        # Save itinerary (will save to user account if user_id provided)
+        result = itinerary_storage.save_itinerary(session_id, data, user_id)
         
         if result['success']:
             response = jsonify(result)
@@ -1606,6 +1798,11 @@ def update_itinerary_section(section_name):
                 'error': f'Invalid section. Must be one of: {", ".join(valid_sections)}'
             }), 400
         
+        # Get user ID if logged in
+        user_id = None
+        if current_user.is_authenticated:
+            user_id = current_user.id
+        
         # Get session ID
         session_id = request.cookies.get('itinerary_session_id')
         if not session_id:
@@ -1615,7 +1812,12 @@ def update_itinerary_section(section_name):
         data = request.get_json()
         
         # Update section
-        result = itinerary_storage.update_section(session_id, section_name, data)
+        result = itinerary_storage.update_section(
+            session_id=session_id,
+            user_id=user_id,
+            section_name=section_name,
+            section_data=data
+        )
         
         if result['success']:
             response = jsonify(result)
@@ -1630,18 +1832,82 @@ def update_itinerary_section(section_name):
             'error': str(e)
         }), 500
 
-@app.route('/api/itinerary/clear', methods=['POST', 'DELETE'])
-def clear_itinerary():
-    """Clear all itinerary data"""
+@app.route('/api/itinerary/sync', methods=['POST'])
+@login_required
+def sync_itinerary_to_account():
+    """Sync session itinerary to user account (login)"""
     try:
+        # Get session ID from cookie
         session_id = request.cookies.get('itinerary_session_id')
         if not session_id:
             return jsonify({
                 'success': False,
-                'error': 'No session to clear'
+                'error': 'No session data to sync'
             }), 400
         
-        result = itinerary_storage.clear_itinerary(session_id)
+        # Get user ID
+        user_id = current_user.id
+        
+        # Merge session data into user account
+        result = itinerary_storage.merge_sessions(session_id, user_id)
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': 'Itinerary synced to user account',
+                'user_id': user_id,
+                'session_id': session_id
+            })
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/itinerary/user', methods=['GET'])
+@login_required
+def get_user_itinerary():
+    """Get itinerary specifically for logged-in user"""
+    try:
+        user_id = current_user.id
+        result = itinerary_storage.get_itinerary(user_id=user_id)
+        
+        if result['success']:
+            return jsonify(result)
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/itinerary/clear', methods=['POST', 'DELETE'])
+def clear_itinerary():
+    """Clear all itinerary data"""
+    try:
+        # Get user ID if logged in
+        user_id = None
+        if current_user.is_authenticated:
+            user_id = current_user.id
+        
+        # Get session ID
+        session_id = request.cookies.get('itinerary_session_id')
+        
+        if not user_id and not session_id:
+            return jsonify({
+                'success': False,
+                'error': 'No session or user to clear'
+            }), 400
+        
+        result = itinerary_storage.clear_itinerary(
+            session_id=session_id if not user_id else None,
+            user_id=user_id
+        )
         
         if result['success']:
             return jsonify(result)
@@ -1659,28 +1925,14 @@ def get_session_info():
     """Get current session information"""
     try:
         session_id = request.cookies.get('itinerary_session_id')
-        
-        if not session_id:
-            return jsonify({
-                'success': True,
-                'has_session': False,
-                'message': 'No active session'
-            })
-        
-        # Check if session exists in database
-        result = itinerary_storage.get_itinerary(session_id)
+        user_id = current_user.id if current_user.is_authenticated else None
         
         return jsonify({
             'success': True,
-            'has_session': True,
+            'has_session': bool(session_id),
+            'is_logged_in': current_user.is_authenticated,
             'session_id': session_id,
-            'has_data': any([
-                result['data']['trip_info'],
-                result['data']['breakfast'],
-                result['data']['landmarks'],
-                result['data']['shopping'],
-                result['data']['broadway']
-            ]) if result['success'] else False
+            'user_id': user_id
         })
         
     except Exception as e:
@@ -1699,6 +1951,7 @@ def create_new_itinerary():
         response = jsonify({
             'success': True,
             'session_id': session_id,
+            'user_id': current_user.id if current_user.is_authenticated else None,
             'message': 'New itinerary session created'
         })
         
@@ -1713,7 +1966,7 @@ def create_new_itinerary():
             'error': str(e)
         }), 500
 
-# Admin endpoints (optional, for monitoring)
+# Admin endpoints
 @app.route('/api/itinerary/admin/sessions', methods=['GET'])
 @login_required
 def get_all_itinerary_sessions():
@@ -1722,13 +1975,39 @@ def get_all_itinerary_sessions():
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     
     try:
-        limit = request.args.get('limit', 100, type=int)
-        result = itinerary_storage.get_all_sessions(limit)
+        conn = sqlite3.connect("itinerary_storage.db")
+        cursor = conn.cursor()
         
-        if result['success']:
-            return jsonify(result)
-        else:
-            return jsonify(result), 500
+        cursor.execute('''
+            SELECT session_id, user_id, trip_info, breakfast, landmarks, shopping, broadway, 
+                   created_at, updated_at
+            FROM itinerary 
+            ORDER BY updated_at DESC 
+            LIMIT 100
+        ''')
+        
+        sessions = []
+        for row in cursor.fetchall():
+            session_data = {
+                'session_id': row[0],
+                'user_id': row[1],
+                'trip_info': json.loads(row[2]) if row[2] else None,
+                'breakfast': json.loads(row[3]) if row[3] else None,
+                'landmarks': json.loads(row[4]) if row[4] else None,
+                'shopping': json.loads(row[5]) if row[5] else None,
+                'broadway': json.loads(row[6]) if row[6] else None,
+                'created_at': row[7],
+                'updated_at': row[8]
+            }
+            sessions.append(session_data)
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'count': len(sessions),
+            'sessions': sessions
+        })
             
     except Exception as e:
         return jsonify({
@@ -1743,10 +2022,18 @@ def test_itinerary_api():
         'success': True,
         'message': 'Itinerary Storage API is running!',
         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'features': [
+            'User authentication integration',
+            'Session-based fallback for guests',
+            'Automatic merging on login',
+            'Persistent storage in SQLite database'
+        ],
         'endpoints': {
-            'GET /api/itinerary': 'Get itinerary for current session',
-            'POST /api/itinerary': 'Save entire itinerary',
+            'GET /api/itinerary': 'Get itinerary (auto-detects user/session)',
+            'POST /api/itinerary': 'Save itinerary (saves to user account if logged in)',
             'POST /api/itinerary/section/{section}': 'Update specific section',
+            'POST /api/itinerary/sync': 'Sync session data to user account (login)',
+            'GET /api/itinerary/user': 'Get user-specific itinerary',
             'DELETE /api/itinerary/clear': 'Clear itinerary',
             'GET /api/itinerary/session': 'Get session info',
             'POST /api/itinerary/new': 'Create new session',
@@ -1773,6 +2060,15 @@ def login():
         user = User.query.filter_by(_uid=request.form['username']).first()
         if user and user.is_password(request.form['password']):
             login_user(user)
+            
+            # Sync itinerary from session to user account
+            session_id = request.cookies.get('itinerary_session_id')
+            if session_id:
+                try:
+                    itinerary_storage.merge_sessions(session_id, user.id)
+                except Exception as e:
+                    print(f"Note: Could not sync itinerary on login: {e}")
+            
             if not is_safe_url(next_page):
                 return abort(400)
             return redirect(next_page or url_for('index'))
@@ -2544,11 +2840,15 @@ if __name__ == "__main__":
     print("  • http://localhost:{}/api/broadway".format(port))
     print("  • http://localhost:{}/api/broadway/history".format(port))
     print("  • http://localhost:{}/api/broadway/test".format(port))
-    print("\n📝 ITINERARY STORAGE API ENDPOINTS:")
+    print("\n📝 ITINERARY STORAGE API ENDPOINTS (with User Auth):")
     print("  • http://localhost:{}/api/itinerary".format(port))
-    print("  • http://localhost:{}/api/itinerary/section/breakfast".format(port))
-    print("  • http://localhost:{}/api/itinerary/clear".format(port))
+    print("  • http://localhost:{}/api/itinerary/sync (sync on login)".format(port))
+    print("  • http://localhost:{}/api/itinerary/user (user-specific)".format(port))
     print("  • http://localhost:{}/api/itinerary/test".format(port))
-    print("  • Database: itinerary_storage.db")
+    print("  • Database: itinerary_storage.db (with user_id support)")
+    print("\n🔑 USER AUTHENTICATION FEATURES:")
+    print("  • Itinerary automatically saves to user account when logged in")
+    print("  • Session data merges into user account on login")
+    print("  • Users see their saved itinerary across devices/sessions")
+    print("=" * 70)
     app.run(debug=True, host=host, port=port, use_reloader=False)
-
