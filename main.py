@@ -1189,7 +1189,237 @@ class BroadwayScraper:
         except Exception as e:
             print(f"Error getting Broadway shows: {e}")
             return []
-broadway_scraper = BroadwayScraper()    
+broadway_scraper = BroadwayScraper()   
+
+# CUSTOM EVENTS MANAGER CLASS
+# ============================================================================
+class CustomEventsManager:
+    def __init__(self):
+        self.db_path = "custom_events.db"
+        self.init_database()
+    
+    def init_database(self):
+        """Create database for user-submitted custom events"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Custom events table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS custom_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                event_name TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                description TEXT,
+                location TEXT,
+                time TEXT,
+                price TEXT,
+                image_url TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_approved BOOLEAN DEFAULT 1
+            )
+        ''')
+        
+        # User itinerary custom events
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS itinerary_custom_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                event_id INTEGER,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (event_id) REFERENCES custom_events(id)
+            )
+        ''')
+        
+        # Event popularity tracking
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS custom_event_popularity (
+                event_id INTEGER PRIMARY KEY,
+                times_added INTEGER DEFAULT 0,
+                last_added TIMESTAMP,
+                FOREIGN KEY (event_id) REFERENCES custom_events(id)
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        print("Custom Events Database initialized")
+    
+    def suggest_category(self, event_name, description, location):
+        """Intelligently suggest a category based on event details"""
+        text = f"{event_name} {description} {location}".lower()
+        
+        # Main categories
+        main_categories = {
+            'Breakfast': ['breakfast', 'brunch', 'bagel', 'cafe', 'coffee', 'pancake', 'waffle', 'diner', 'eggs', 'pastry'],
+            'Shopping': ['shop', 'store', 'mall', 'boutique', 'market', 'clothing', 'fashion', 'retail'],
+            'Landmarks': ['museum', 'park', 'statue', 'bridge', 'building', 'monument', 'memorial', 'tower', 'square', 'liberty', 'empire state', 'central park'],
+            'Broadway': ['broadway', 'show', 'theater', 'theatre', 'musical', 'play', 'performance', 'stage']
+        }
+        
+        # Check main categories first
+        for category, keywords in main_categories.items():
+            if any(keyword in text for keyword in keywords):
+                return category
+        
+        # Custom categories
+        custom_categories = {
+            'Scenery': ['carriage', 'ride', 'tour', 'sightseeing', 'view', 'scenic', 'observation'],
+            'Nightlife': ['bar', 'club', 'nightclub', 'lounge', 'cocktail', 'drinks'],
+            'Recreation': ['sports', 'game', 'basketball', 'baseball', 'gym', 'fitness'],
+            'Art & Culture': ['gallery', 'art', 'exhibition', 'culture', 'poetry', 'concert'],
+            'Family Activities': ['kids', 'children', 'family', 'playground', 'zoo', 'aquarium'],
+            'Food & Dining': ['lunch', 'dinner', 'restaurant', 'cuisine', 'pizza', 'sushi'],
+            'Entertainment': ['movie', 'cinema', 'comedy', 'magic', 'arcade'],
+            'Nature': ['garden', 'botanical', 'nature', 'beach', 'river', 'hiking'],
+            'Transportation': ['ferry', 'subway', 'train', 'taxi', 'bike', 'walk']
+        }
+        
+        for category, keywords in custom_categories.items():
+            if any(keyword in text for keyword in keywords):
+                return category
+        
+        return 'Other Activities'
+    
+    def create_event(self, user_id, event_data):
+        """Add a new custom event with intelligent category suggestion"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Get suggested category
+            suggested_category = self.suggest_category(
+                event_data.get('event_name', ''),
+                event_data.get('description', ''),
+                event_data.get('location', '')
+            )
+            
+            event_type = event_data.get('event_type') or suggested_category
+            
+            cursor.execute('''
+                INSERT INTO custom_events 
+                (user_id, event_name, event_type, description, location, time, price, image_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                user_id,
+                event_data.get('event_name'),
+                event_type,
+                event_data.get('description', ''),
+                event_data.get('location', ''),
+                event_data.get('time', ''),
+                event_data.get('price', ''),
+                event_data.get('image_url', '')
+            ))
+            
+            event_id = cursor.lastrowid
+            conn.commit()
+            print(f"Created event: {event_data.get('event_name')} | Category: {event_type}")
+            
+            return {
+                'event_id': event_id,
+                'suggested_category': event_type
+            }
+            
+        except Exception as e:
+            print(f"Error creating event: {e}")
+            return None
+        finally:
+            conn.close()
+    
+    def get_all_events(self, event_type=None, limit=50):
+        """Get all custom events, optionally filtered by type"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        if event_type:
+            cursor.execute('''
+                SELECT e.*, p.times_added, p.last_added
+                FROM custom_events e
+                LEFT JOIN custom_event_popularity p ON e.id = p.event_id
+                WHERE e.event_type = ? AND e.is_approved = 1
+                ORDER BY p.times_added DESC, e.created_at DESC
+                LIMIT ?
+            ''', (event_type, limit))
+        else:
+            cursor.execute('''
+                SELECT e.*, p.times_added, p.last_added
+                FROM custom_events e
+                LEFT JOIN custom_event_popularity p ON e.id = p.event_id
+                WHERE e.is_approved = 1
+                ORDER BY p.times_added DESC, e.created_at DESC
+                LIMIT ?
+            ''', (limit,))
+        
+        columns = ['id', 'user_id', 'event_name', 'event_type', 'description', 
+                   'location', 'time', 'price', 'image_url', 'created_at', 
+                   'is_approved', 'times_added', 'last_added']
+        
+        events = []
+        for row in cursor.fetchall():
+            event = dict(zip(columns, row))
+            event['times_added'] = event.get('times_added') or 0
+            events.append(event)
+        
+        conn.close()
+        return events
+    
+    def add_to_itinerary(self, user_id, event_id):
+        """Add a custom event to user's itinerary"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            current_time = datetime.now().isoformat()
+            
+            cursor.execute('''
+                INSERT INTO itinerary_custom_events (user_id, event_id, added_at)
+                VALUES (?, ?, ?)
+            ''', (user_id, event_id, current_time))
+            
+            cursor.execute('''
+                INSERT INTO custom_event_popularity (event_id, times_added, last_added)
+                VALUES (?, 1, ?)
+                ON CONFLICT(event_id) DO UPDATE SET
+                    times_added = times_added + 1,
+                    last_added = ?
+            ''', (event_id, current_time, current_time))
+            
+            conn.commit()
+            return True
+            
+        except Exception as e:
+            print(f"Error adding to itinerary: {e}")
+            return False
+        finally:
+            conn.close()
+    
+    def get_user_custom_events(self, user_id):
+        """Get all custom events in a user's itinerary"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT e.*, i.added_at
+            FROM custom_events e
+            JOIN itinerary_custom_events i ON e.id = i.event_id
+            WHERE i.user_id = ?
+            ORDER BY i.added_at DESC
+        ''', (user_id,))
+        
+        columns = ['id', 'user_id', 'event_name', 'event_type', 'description', 
+                   'location', 'time', 'price', 'image_url', 'created_at', 
+                   'is_approved', 'added_at']
+        
+        events = []
+        for row in cursor.fetchall():
+            events.append(dict(zip(columns, row)))
+        
+        conn.close()
+        return events
+
+# Create custom events manager instance
+custom_events_manager = CustomEventsManager()
+
 # ============================================================================
 # BROADWAY SCRAPER API ENDPOINTS
 # ============================================================================
@@ -2041,6 +2271,149 @@ def test_itinerary_api():
         },
         'sections': ['trip_info', 'breakfast', 'landmarks', 'shopping', 'broadway']
     })
+
+# ADD THESE ENDPOINTS HERE ⬇️
+# ============================================================================
+# CUSTOM EVENTS API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/events/custom', methods=['POST'])
+def create_custom_event():
+    """Create a new custom event"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        
+        if not user_id or not data.get('event_name'):
+            return jsonify({
+                'success': False,
+                'message': 'user_id and event_name are required'
+            }), 400
+        
+        result = custom_events_manager.create_event(user_id, data)
+        
+        if result:
+            return jsonify({
+                'success': True,
+                'message': 'Event created successfully',
+                'event_id': result['event_id'],
+                'suggested_category': result['suggested_category']
+            }), 201
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to create event'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/events/custom', methods=['GET'])
+def get_custom_events():
+    """Get all custom events or filter by type"""
+    try:
+        event_type = request.args.get('type')
+        limit = request.args.get('limit', 50, type=int)
+        
+        events = custom_events_manager.get_all_events(event_type, limit)
+        
+        return jsonify({
+            'success': True,
+            'count': len(events),
+            'events': events
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/events/suggest-category', methods=['POST'])
+def get_category_suggestion():
+    """Get category suggestion without creating event"""
+    try:
+        data = request.get_json()
+        
+        category = custom_events_manager.suggest_category(
+            data.get('event_name', ''),
+            data.get('description', ''),
+            data.get('location', '')
+        )
+        
+        return jsonify({
+            'success': True,
+            'category': category
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/events/custom/add-to-itinerary', methods=['POST'])
+def add_custom_to_itinerary():
+    """Add a custom event to user's itinerary"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        event_id = data.get('event_id')
+        
+        if not user_id or not event_id:
+            return jsonify({
+                'success': False,
+                'message': 'user_id and event_id are required'
+            }), 400
+        
+        success = custom_events_manager.add_to_itinerary(user_id, event_id)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Event added to itinerary'
+            }), 201
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to add event to itinerary'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/events/custom/my-itinerary', methods=['GET'])
+def get_my_custom_events():
+    """Get user's custom events from their itinerary"""
+    try:
+        user_id = request.args.get('user_id')
+        
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'message': 'user_id is required'
+            }), 400
+        
+        events = custom_events_manager.get_user_custom_events(user_id)
+        
+        return jsonify({
+            'success': True,
+            'count': len(events),
+            'events': events
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
 # ============================================================================
 # EXISTING FLASK ROUTES (from your second file)
 # ============================================================================
@@ -2811,6 +3184,29 @@ def generate_data():
     init_microblogs()
 
 app.cli.add_command(custom_cli)
+
+# SERVE CUSTOM EVENTS PAGE
+# ============================================================================
+@app.route('/custom-events')
+def serve_custom_events():
+    """Serve the custom events page from markdown file"""
+    try:
+        with open('custom-events.md', 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Extract HTML from the markdown code block
+        html_start = content.find('```html')
+        if html_start != -1:
+            html_start += 7  # Skip past ```html
+            html_end = content.find('```', html_start)
+            if html_end != -1:
+                html_content = content[html_start:html_end].strip()
+                return html_content
+        
+        # If extraction failed, return error
+        return "Error: Could not extract HTML from markdown file", 500
+    except Exception as e:
+        return f"Error loading page: {str(e)}", 500
 
 # ============================================================================
 # MAIN ENTRY POINT
