@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Custom Events Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a2332 0%, #2c3e50 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: #1a1a1a;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #ffd700;
+            font-size: 2.5em;
+        }
+
+        .stats {
+            display: flex;
+            gap: 30px;
+            color: white;
+        }
+
+        .stat-box {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: #ccc;
+        }
+
+        .controls {
+            background: #1a1a1a;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            color: #1a2332;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 215, 0, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+            color: white;
+        }
+
+        .btn-small {
+            padding: 8px 15px;
+            font-size: 0.9em;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            color: #ffd700;
+        }
+
+        select, input[type="text"] {
+            padding: 10px;
+            background: #2a2a2a;
+            border: 1px solid #ffd700;
+            border-radius: 8px;
+            color: white;
+            font-size: 1em;
+        }
+
+        .events-table {
+            background: #1a1a1a;
+            border-radius: 15px;
+            padding: 30px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #2a2a2a;
+        }
+
+        th {
+            padding: 15px;
+            text-align: left;
+            color: #ffd700;
+            font-weight: bold;
+            border-bottom: 2px solid #ffd700;
+        }
+
+        td {
+            padding: 15px;
+            color: #ccc;
+            border-bottom: 1px solid #333;
+        }
+
+        tbody tr {
+            transition: all 0.3s ease;
+        }
+
+        tbody tr:hover {
+            background: #2a2a2a;
+        }
+
+        .event-name {
+            color: #ffd700;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .event-type {
+            display: inline-block;
+            background: #ffd700;
+            color: #1a2332;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .status-approved {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .status-pending {
+            background: #FF9800;
+            color: white;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .popularity {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #1a1a1a;
+            border-radius: 15px;
+            padding: 40px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            color: #ffd700;
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #ffd700;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            background: #2a2a2a;
+            border: 1px solid #ffd700;
+            border-radius: 8px;
+            color: white;
+            font-size: 1em;
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .btn-close {
+            background: #666;
+        }
+
+        .loading {
+            text-align: center;
+            color: #ffd700;
+            padding: 40px;
+            font-size: 1.2em;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .success {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .error {
+            background: #f44336;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .stats {
+                margin-top: 20px;
+            }
+
+            .events-table {
+                padding: 15px;
+            }
+
+            table {
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1>🗽 Custom Events Admin</h1>
+                <p style="color: #ccc; margin-top: 10px;">Manage all user-submitted custom events</p>
+            </div>
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-number" id="total-events">0</div>
+                    <div class="stat-label">Total Events</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number" id="approved-events">0</div>
+                    <div class="stat-label">Approved</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number" id="pending-events">0</div>
+                    <div class="stat-label">Pending</div>
+                </div>
+            </div>
+        </header>
+
+        <div class="controls">
+            <button class="btn" onclick="openAddModal()">➕ Add New Event</button>
+            <button class="btn" onclick="loadEvents()">🔄 Refresh</button>
+            
+            <div class="filter-group">
+                <label>Filter:</label>
+                <select id="filter-status" onchange="filterEvents()">
+                    <option value="">All Status</option>
+                    <option value="approved">Approved</option>
+                    <option value="pending">Pending</option>
+                </select>
+                
+                <select id="filter-category" onchange="filterEvents()">
+                    <option value="">All Categories</option>
+                    <option value="Breakfast">Breakfast</option>
+                    <option value="Shopping">Shopping</option>
+                    <option value="Landmarks">Landmarks</option>
+                    <option value="Broadway">Broadway</option>
+                    <option value="Scenery">Scenery</option>
+                    <option value="Nightlife">Nightlife</option>
+                    <option value="Recreation">Recreation</option>
+                    <option value="Art & Culture">Art & Culture</option>
+                    <option value="Family Activities">Family</option>
+                    <option value="Food & Dining">Dining</option>
+                    <option value="Entertainment">Entertainment</option>
+                    <option value="Nature">Nature</option>
+                </select>
+                
+                <input type="text" id="search-input" placeholder="Search events..." onkeyup="filterEvents()">
+            </div>
+        </div>
+
+        <div id="message-container"></div>
+
+        <div class="events-table">
+            <div id="loading" class="loading">Loading events...</div>
+            <table id="events-table" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Event Name</th>
+                        <th>Category</th>
+                        <th>Location</th>
+                        <th>Time</th>
+                        <th>Price</th>
+                        <th>Popularity</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="events-body">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Add/Edit Event Modal -->
+    <div id="event-modal" class="modal">
+        <div class="modal-content">
+            <h2 class="modal-header" id="modal-title">Add New Event</h2>
+            <form id="event-form">
+                <div class="form-group">
+                    <label for="event-name">Event Name *</label>
+                    <input type="text" id="event-name" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="location">Location</label>
+                    <input type="text" id="location">
+                </div>
+
+                <div class="form-group">
+                    <label for="event-type">Category</label>
+                    <select id="event-type">
+                        <option value="">Auto-Suggest</option>
+                        <option value="Breakfast">Breakfast</option>
+                        <option value="Shopping">Shopping</option>
+                        <option value="Landmarks">Landmarks</option>
+                        <option value="Broadway">Broadway</option>
+                        <option value="Scenery">Scenery</option>
+                        <option value="Nightlife">Nightlife</option>
+                        <option value="Recreation">Recreation</option>
+                        <option value="Art & Culture">Art & Culture</option>
+                        <option value="Family Activities">Family</option>
+                        <option value="Food & Dining">Dining</option>
+                        <option value="Entertainment">Entertainment</option>
+                        <option value="Nature">Nature</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="time">Time</label>
+                    <input type="text" id="time" placeholder="e.g., 10:00 AM - 12:00 PM">
+                </div>
+
+                <div class="form-group">
+                    <label for="price">Price</label>
+                    <input type="text" id="price" placeholder="e.g., Free, $20, $50-100">
+                </div>
+
+                <div class="form-group">
+                    <label for="image-url">Image URL</label>
+                    <input type="url" id="image-url">
+                </div>
+
+                <div class="modal-actions">
+                    <button type="submit" class="btn">💾 Save Event</button>
+                    <button type="button" class="btn btn-close" onclick="closeModal()">❌ Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://127.0.0.1:8303';
+        let allEvents = [];
+
+        // Load all events
+        async function loadEvents() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('events-table').style.display = 'none';
+            
+            try {
+                const response = await fetch(`${API_URL}/api/admin/events/custom`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    allEvents = data.events;
+                    displayEvents(allEvents);
+                    updateStats(allEvents);
+                } else {
+                    showMessage('Failed to load events', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading events:', error);
+                showMessage('Failed to load events: ' + error.message, 'error');
+            }
+        }
+
+        // Display events in table
+        function displayEvents(events) {
+            const tbody = document.getElementById('events-body');
+            tbody.innerHTML = '';
+            
+            if (events.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 40px;">No events found</td></tr>';
+            } else {
+                events.forEach(event => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${event.id}</td>
+                        <td><div class="event-name">${event.event_name}</div></td>
+                        <td><span class="event-type">${event.event_type}</span></td>
+                        <td>${event.location || '-'}</td>
+                        <td>${event.time || '-'}</td>
+                        <td>${event.price || '-'}</td>
+                        <td><span class="popularity">⭐ ${event.times_added || 0}</span></td>
+                        <td>
+                            <span class="status-badge ${event.is_approved ? 'status-approved' : 'status-pending'}">
+                                ${event.is_approved ? 'Approved' : 'Pending'}
+                            </span>
+                        </td>
+                        <td>${new Date(event.created_at).toLocaleDateString()}</td>
+                        <td>
+                            <div class="action-buttons">
+                                ${!event.is_approved ? `
+                                    <button class="btn btn-small" onclick="approveEvent(${event.id}, true)">
+                                        ✅ Approve
+                                    </button>
+                                ` : `
+                                    <button class="btn btn-small" onclick="approveEvent(${event.id}, false)">
+                                        ⏸️ Unapprove
+                                    </button>
+                                `}
+                                <button class="btn btn-danger btn-small" onclick="deleteEvent(${event.id}, '${event.event_name.replace(/'/g, "\\'")}')">
+                                    🗑️ Delete
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+            
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('events-table').style.display = 'table';
+        }
+
+        // Update stats
+        function updateStats(events) {
+            const total = events.length;
+            const approved = events.filter(e => e.is_approved).length;
+            const pending = events.filter(e => !e.is_approved).length;
+            
+            document.getElementById('total-events').textContent = total;
+            document.getElementById('approved-events').textContent = approved;
+            document.getElementById('pending-events').textContent = pending;
+        }
+
+        // Filter events
+        function filterEvents() {
+            const statusFilter = document.getElementById('filter-status').value;
+            const categoryFilter = document.getElementById('filter-category').value;
+            const searchText = document.getElementById('search-input').value.toLowerCase();
+            
+            let filtered = allEvents;
+            
+            if (statusFilter) {
+                filtered = filtered.filter(e => {
+                    if (statusFilter === 'approved') return e.is_approved;
+                    if (statusFilter === 'pending') return !e.is_approved;
+                    return true;
+                });
+            }
+            
+            if (categoryFilter) {
+                filtered = filtered.filter(e => e.event_type === categoryFilter);
+            }
+            
+            if (searchText) {
+                filtered = filtered.filter(e => 
+                    e.event_name.toLowerCase().includes(searchText) ||
+                    (e.description && e.description.toLowerCase().includes(searchText)) ||
+                    (e.location && e.location.toLowerCase().includes(searchText))
+                );
+            }
+            
+            displayEvents(filtered);
+        }
+
+        // Delete event
+        async function deleteEvent(eventId, eventName) {
+            if (!confirm(`Are you sure you want to delete "${eventName}"?\n\nThis will permanently remove the event and all associated data.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/api/admin/events/custom/${eventId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(`Event "${eventName}" deleted successfully`, 'success');
+                    loadEvents();
+                } else {
+                    showMessage('Failed to delete event: ' + data.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting event:', error);
+                showMessage('Failed to delete event', 'error');
+            }
+        }
+
+        // Approve/unapprove event
+        async function approveEvent(eventId, approve) {
+            try {
+                const response = await fetch(`${API_URL}/api/admin/events/custom/${eventId}/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_approved: approve })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    loadEvents();
+                } else {
+                    showMessage('Failed: ' + data.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showMessage('Failed to update event status', 'error');
+            }
+        }
+
+        // Modal functions
+        function openAddModal() {
+            document.getElementById('modal-title').textContent = 'Add New Event';
+            document.getElementById('event-form').reset();
+            document.getElementById('event-modal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('event-modal').classList.remove('active');
+        }
+
+        // Handle form submission
+        document.getElementById('event-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const eventData = {
+                event_name: document.getElementById('event-name').value,
+                description: document.getElementById('description').value,
+                location: document.getElementById('location').value,
+                event_type: document.getElementById('event-type').value,
+                time: document.getElementById('time').value,
+                price: document.getElementById('price').value,
+                image_url: document.getElementById('image-url').value
+            };
+            
+            try {
+                const response = await fetch(`${API_URL}/api/admin/events/custom`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(eventData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(`Event created successfully under category: ${data.suggested_category}`, 'success');
+                    closeModal();
+                    loadEvents();
+                } else {
+                    showMessage('Failed to create event: ' + data.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error creating event:', error);
+                showMessage('Failed to create event', 'error');
+            }
+        });
+
+        // Show message
+        function showMessage(message, type) {
+            const container = document.getElementById('message-container');
+            container.innerHTML = `<div class="message ${type}">${message}</div>`;
+            setTimeout(() => container.innerHTML = '', 5000);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadEvents();
+        });
+
+        // Close modal on outside click
+        document.getElementById('event-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'event-modal') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>

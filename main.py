@@ -2415,6 +2415,148 @@ def get_my_custom_events():
         }), 500
 
 # ============================================================================
+# CUSTOM EVENTS ADMIN PAGE - ADD THIS ENTIRE SECTION HERE
+# ============================================================================
+@app.route('/admin/custom-events')
+@login_required
+def admin_custom_events():
+    """Admin page for managing custom events"""
+    return render_template('admin_custom_events.html')
+
+@app.route('/api/admin/events/custom', methods=['GET'])
+@login_required
+def admin_get_all_custom_events():
+    """Get ALL custom events for admin (including unapproved)"""
+    try:
+        conn = sqlite3.connect(custom_events_manager.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT e.*, p.times_added, p.last_added
+            FROM custom_events e
+            LEFT JOIN custom_event_popularity p ON e.id = p.event_id
+            ORDER BY e.created_at DESC
+        ''')
+        
+        columns = ['id', 'user_id', 'event_name', 'event_type', 'description', 
+                   'location', 'time', 'price', 'image_url', 'created_at', 
+                   'is_approved', 'times_added', 'last_added']
+        
+        events = []
+        for row in cursor.fetchall():
+            event = dict(zip(columns, row))
+            event['times_added'] = event.get('times_added') or 0
+            events.append(event)
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'count': len(events),
+            'events': events
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/admin/events/custom/<int:event_id>', methods=['DELETE'])
+@login_required
+def admin_delete_custom_event(event_id):
+    """Delete a custom event (admin only)"""
+    try:
+        conn = sqlite3.connect(custom_events_manager.db_path)
+        cursor = conn.cursor()
+        
+        # Delete from popularity table first
+        cursor.execute('DELETE FROM custom_event_popularity WHERE event_id = ?', (event_id,))
+        
+        # Delete from itinerary entries
+        cursor.execute('DELETE FROM itinerary_custom_events WHERE event_id = ?', (event_id,))
+        
+        # Delete the event
+        cursor.execute('DELETE FROM custom_events WHERE id = ?', (event_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Event deleted successfully'
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/admin/events/custom/<int:event_id>/approve', methods=['POST'])
+@login_required
+def admin_approve_event(event_id):
+    """Approve/unapprove a custom event"""
+    try:
+        data = request.get_json()
+        is_approved = data.get('is_approved', True)
+        
+        conn = sqlite3.connect(custom_events_manager.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE custom_events 
+            SET is_approved = ?
+            WHERE id = ?
+        ''', (1 if is_approved else 0, event_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Event {"approved" if is_approved else "unapproved"} successfully'
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/admin/events/custom', methods=['POST'])
+@login_required
+def admin_create_custom_event():
+    """Admin create custom event"""
+    try:
+        data = request.get_json()
+        
+        # Use admin's user_id
+        result = custom_events_manager.create_event(
+            user_id=f"admin_{current_user.id}",
+            event_data=data
+        )
+        
+        if result:
+            return jsonify({
+                'success': True,
+                'message': 'Event created successfully',
+                'event_id': result['event_id'],
+                'suggested_category': result['suggested_category']
+            }), 201
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to create event'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+# ============================================================================
 # EXISTING FLASK ROUTES (from your second file)
 # ============================================================================
 
@@ -3189,24 +3331,9 @@ app.cli.add_command(custom_cli)
 # ============================================================================
 @app.route('/custom-events')
 def serve_custom_events():
-    """Serve the custom events page from markdown file"""
-    try:
-        with open('custom-events.md', 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        # Extract HTML from the markdown code block
-        html_start = content.find('```html')
-        if html_start != -1:
-            html_start += 7  # Skip past ```html
-            html_end = content.find('```', html_start)
-            if html_end != -1:
-                html_content = content[html_start:html_end].strip()
-                return html_content
-        
-        # If extraction failed, return error
-        return "Error: Could not extract HTML from markdown file", 500
-    except Exception as e:
-        return f"Error loading page: {str(e)}", 500
+    """Serve the custom events page"""
+    # Return a simple redirect or render the template directly
+    return render_template('events.html')
 
 # ============================================================================
 # MAIN ENTRY POINT
