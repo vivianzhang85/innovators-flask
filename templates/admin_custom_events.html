@@ -13,7 +13,7 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a2332 0%, #2c3e50 100%);
+            background: #f5f7fa;
             min-height: 100vh;
             padding: 20px;
         }
@@ -23,60 +23,79 @@
             margin: 0 auto;
         }
 
-        header {
-            background: #1a1a1a;
-            border-radius: 15px;
-            padding: 30px;
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 10px;
             margin-bottom: 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            text-align: center;
         }
 
         h1 {
-            color: #ffd700;
             font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.95;
         }
 
         .stats {
             display: flex;
-            gap: 30px;
-            color: white;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 30px;
+            flex-wrap: wrap;
         }
 
         .stat-box {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 20px 40px;
+            border-radius: 10px;
             text-align: center;
+            backdrop-filter: blur(10px);
         }
 
         .stat-number {
-            font-size: 2em;
+            font-size: 2.5em;
             font-weight: bold;
-            color: #4CAF50;
+            color: white;
         }
 
         .stat-label {
             font-size: 0.9em;
-            color: #ccc;
+            margin-top: 5px;
+            opacity: 0.9;
         }
 
         .controls {
-            background: #1a1a1a;
-            border-radius: 15px;
-            padding: 20px;
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
             margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .controls h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .btn-group {
             display: flex;
             gap: 15px;
+            margin-bottom: 20px;
             flex-wrap: wrap;
-            align-items: center;
         }
 
         .btn {
-            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
-            color: #1a2332;
+            background: #667eea;
+            color: white;
             border: none;
             padding: 12px 25px;
-            border-radius: 25px;
+            border-radius: 5px;
             cursor: pointer;
             font-size: 1em;
             font-weight: bold;
@@ -84,13 +103,16 @@
         }
 
         .btn:hover {
+            background: #5a67d8;
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(255, 215, 0, 0.4);
         }
 
         .btn-danger {
-            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
-            color: white;
+            background: #f44336;
+        }
+
+        .btn-danger:hover {
+            background: #d32f2f;
         }
 
         .btn-small {
@@ -98,27 +120,42 @@
             font-size: 0.9em;
         }
 
-        .filter-group {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            color: #ffd700;
+        .btn-approve {
+            background: #4CAF50;
         }
 
-        select, input[type="text"] {
-            padding: 10px;
-            background: #2a2a2a;
-            border: 1px solid #ffd700;
-            border-radius: 8px;
-            color: white;
-            font-size: 1em;
+        .btn-approve:hover {
+            background: #45a049;
+        }
+
+        .btn-unapprove {
+            background: #FF9800;
+        }
+
+        .btn-unapprove:hover {
+            background: #f57c00;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        .search-box:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
         .events-table {
-            background: #1a1a1a;
-            border-radius: 15px;
+            background: white;
+            border-radius: 10px;
             padding: 30px;
             overflow-x: auto;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
 
         table {
@@ -127,21 +164,21 @@
         }
 
         thead {
-            background: #2a2a2a;
+            background: #f8f9fa;
         }
 
         th {
             padding: 15px;
             text-align: left;
-            color: #ffd700;
+            color: #667eea;
             font-weight: bold;
-            border-bottom: 2px solid #ffd700;
+            border-bottom: 2px solid #667eea;
         }
 
         td {
             padding: 15px;
-            color: #ccc;
-            border-bottom: 1px solid #333;
+            color: #666;
+            border-bottom: 1px solid #eee;
         }
 
         tbody tr {
@@ -149,46 +186,29 @@
         }
 
         tbody tr:hover {
-            background: #2a2a2a;
+            background: #f8f9fa;
         }
 
         .event-name {
-            color: #ffd700;
+            color: #333;
             font-weight: bold;
             font-size: 1.1em;
         }
 
         .event-type {
             display: inline-block;
-            background: #ffd700;
-            color: #1a2332;
-            padding: 4px 10px;
-            border-radius: 12px;
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 15px;
             font-size: 0.85em;
             font-weight: bold;
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 0.85em;
-            font-weight: bold;
-        }
-
-        .status-approved {
-            background: #4CAF50;
-            color: white;
-        }
-
-        .status-pending {
-            background: #FF9800;
-            color: white;
         }
 
         .action-buttons {
             display: flex;
             gap: 8px;
+            flex-wrap: wrap;
         }
 
         .popularity {
@@ -203,7 +223,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.7);
             z-index: 1000;
             align-items: center;
             justify-content: center;
@@ -214,8 +234,8 @@
         }
 
         .modal-content {
-            background: #1a1a1a;
-            border-radius: 15px;
+            background: white;
+            border-radius: 10px;
             padding: 40px;
             max-width: 600px;
             width: 90%;
@@ -224,7 +244,7 @@
         }
 
         .modal-header {
-            color: #ffd700;
+            color: #667eea;
             font-size: 2em;
             margin-bottom: 20px;
         }
@@ -235,19 +255,25 @@
 
         label {
             display: block;
-            color: #ffd700;
+            color: #333;
             margin-bottom: 8px;
             font-weight: bold;
         }
 
-        input, textarea {
+        input, textarea, select {
             width: 100%;
             padding: 12px;
-            background: #2a2a2a;
-            border: 1px solid #ffd700;
-            border-radius: 8px;
-            color: white;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            color: #333;
             font-size: 1em;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
         textarea {
@@ -262,42 +288,55 @@
         }
 
         .btn-close {
-            background: #666;
+            background: #999;
+        }
+
+        .btn-close:hover {
+            background: #777;
         }
 
         .loading {
             text-align: center;
-            color: #ffd700;
+            color: #667eea;
             padding: 40px;
             font-size: 1.2em;
         }
 
         .message {
             padding: 15px;
-            border-radius: 8px;
+            border-radius: 5px;
             margin-bottom: 20px;
             text-align: center;
             font-weight: bold;
         }
 
         .success {
-            background: #4CAF50;
-            color: white;
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
         }
 
         .error {
-            background: #f44336;
-            color: white;
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
         }
 
         @media (max-width: 768px) {
-            header {
-                flex-direction: column;
-                text-align: center;
+            .header {
+                padding: 30px 20px;
+            }
+
+            h1 {
+                font-size: 2em;
             }
 
             .stats {
-                margin-top: 20px;
+                flex-direction: column;
+            }
+
+            .btn-group {
+                flex-direction: column;
             }
 
             .events-table {
@@ -307,16 +346,19 @@
             table {
                 font-size: 0.9em;
             }
+
+            .action-buttons {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <div>
-                <h1>🗽 Custom Events Admin</h1>
-                <p style="color: #ccc; margin-top: 10px;">Manage all user-submitted custom events</p>
-            </div>
+        <div class="header">
+            <h1>🗽 Custom Events Admin</h1>
+            <p>Manage all user-submitted custom events for NYC</p>
+            
             <div class="stats">
                 <div class="stat-box">
                     <div class="stat-number" id="total-events">0</div>
@@ -331,41 +373,26 @@
                     <div class="stat-label">Pending</div>
                 </div>
             </div>
-        </header>
-
-        <div class="controls">
-            <button class="btn" onclick="openAddModal()">➕ Add New Event</button>
-            <button class="btn" onclick="loadEvents()">🔄 Refresh</button>
-            
-            <div class="filter-group">
-                <label>Filter:</label>
-                <select id="filter-status" onchange="filterEvents()">
-                    <option value="">All Status</option>
-                    <option value="approved">Approved</option>
-                    <option value="pending">Pending</option>
-                </select>
-                
-                <select id="filter-category" onchange="filterEvents()">
-                    <option value="">All Categories</option>
-                    <option value="Breakfast">Breakfast</option>
-                    <option value="Shopping">Shopping</option>
-                    <option value="Landmarks">Landmarks</option>
-                    <option value="Broadway">Broadway</option>
-                    <option value="Scenery">Scenery</option>
-                    <option value="Nightlife">Nightlife</option>
-                    <option value="Recreation">Recreation</option>
-                    <option value="Art & Culture">Art & Culture</option>
-                    <option value="Family Activities">Family</option>
-                    <option value="Food & Dining">Dining</option>
-                    <option value="Entertainment">Entertainment</option>
-                    <option value="Nature">Nature</option>
-                </select>
-                
-                <input type="text" id="search-input" placeholder="Search events..." onkeyup="filterEvents()">
-            </div>
         </div>
 
-        <div id="message-container"></div>
+        <div class="controls">
+            <h2>Manage Events</h2>
+            
+            <div class="btn-group">
+                <button class="btn" onclick="openAddModal()">➕ Add New Event</button>
+                <button class="btn" onclick="loadEvents()">🔄 Refresh</button>
+            </div>
+            
+            <div class="form-group">
+                <input type="text" 
+                       id="search-input" 
+                       class="search-box"
+                       placeholder="Search events by name, location, or description..." 
+                       onkeyup="filterEvents()">
+            </div>
+
+            <div id="message-container"></div>
+        </div>
 
         <div class="events-table">
             <div id="loading" class="loading">Loading events...</div>
@@ -379,7 +406,6 @@
                         <th>Time</th>
                         <th>Price</th>
                         <th>Popularity</th>
-                        <th>Status</th>
                         <th>Created</th>
                         <th>Actions</th>
                     </tr>
@@ -484,7 +510,7 @@
             tbody.innerHTML = '';
             
             if (events.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 40px;">No events found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px;">No events found</td></tr>';
             } else {
                 events.forEach(event => {
                     const row = document.createElement('tr');
@@ -496,21 +522,16 @@
                         <td>${event.time || '-'}</td>
                         <td>${event.price || '-'}</td>
                         <td><span class="popularity">⭐ ${event.times_added || 0}</span></td>
-                        <td>
-                            <span class="status-badge ${event.is_approved ? 'status-approved' : 'status-pending'}">
-                                ${event.is_approved ? 'Approved' : 'Pending'}
-                            </span>
-                        </td>
                         <td>${new Date(event.created_at).toLocaleDateString()}</td>
                         <td>
                             <div class="action-buttons">
                                 ${!event.is_approved ? `
-                                    <button class="btn btn-small" onclick="approveEvent(${event.id}, true)">
+                                    <button class="btn btn-approve btn-small" onclick="approveEvent(${event.id}, true)">
                                         ✅ Approve
                                     </button>
                                 ` : `
-                                    <button class="btn btn-small" onclick="approveEvent(${event.id}, false)">
-                                        ⏸️ Unapprove
+                                    <button class="btn btn-unapprove btn-small" onclick="approveEvent(${event.id}, false)">
+                                        ⏸️ Hide
                                     </button>
                                 `}
                                 <button class="btn btn-danger btn-small" onclick="deleteEvent(${event.id}, '${event.event_name.replace(/'/g, "\\'")}')">
@@ -538,25 +559,11 @@
             document.getElementById('pending-events').textContent = pending;
         }
 
-        // Filter events
+        // Filter events (search only)
         function filterEvents() {
-            const statusFilter = document.getElementById('filter-status').value;
-            const categoryFilter = document.getElementById('filter-category').value;
             const searchText = document.getElementById('search-input').value.toLowerCase();
             
             let filtered = allEvents;
-            
-            if (statusFilter) {
-                filtered = filtered.filter(e => {
-                    if (statusFilter === 'approved') return e.is_approved;
-                    if (statusFilter === 'pending') return !e.is_approved;
-                    return true;
-                });
-            }
-            
-            if (categoryFilter) {
-                filtered = filtered.filter(e => e.event_type === categoryFilter);
-            }
             
             if (searchText) {
                 filtered = filtered.filter(e => 
