@@ -1191,25 +1191,25 @@ class BroadwayScraper:
             return []
 broadway_scraper = BroadwayScraper()   
 
-# CUSTOM EVENTS MANAGER CLASS
+# CUSTOM PLACES MANAGER CLASS
 # ============================================================================
-class CustomEventsManager:
+class CustomPlacesManager:
     def __init__(self):
-        self.db_path = "custom_events.db"
+        self.db_path = "custom_places.db"
         self.init_database()
     
     def init_database(self):
-        """Create database for user-submitted custom events"""
+        """Create database for user-submitted custom places"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Custom events table
+        # Custom places table
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS custom_events (
+            CREATE TABLE IF NOT EXISTS custom_places (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id TEXT,
-                event_name TEXT NOT NULL,
-                event_type TEXT NOT NULL,
+                place_name TEXT NOT NULL,
+                place_type TEXT NOT NULL,
                 description TEXT,
                 location TEXT,
                 time TEXT,
@@ -1220,34 +1220,34 @@ class CustomEventsManager:
             )
         ''')
         
-        # User itinerary custom events
+        # User itinerary custom places
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS itinerary_custom_events (
+            CREATE TABLE IF NOT EXISTS itinerary_custom_places (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id TEXT,
-                event_id INTEGER,
+                place_id INTEGER,
                 added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (event_id) REFERENCES custom_events(id)
+                FOREIGN KEY (place_id) REFERENCES custom_places(id)
             )
         ''')
         
-        # Event popularity tracking
+        # Place popularity tracking
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS custom_event_popularity (
-                event_id INTEGER PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS custom_place_popularity (
+                place_id INTEGER PRIMARY KEY,
                 times_added INTEGER DEFAULT 0,
                 last_added TIMESTAMP,
-                FOREIGN KEY (event_id) REFERENCES custom_events(id)
+                FOREIGN KEY (place_id) REFERENCES custom_places(id)
             )
         ''')
         
         conn.commit()
         conn.close()
-        print("Custom Events Database initialized")
+        print("Custom Places Database initialized")
     
-    def suggest_category(self, event_name, description, location):
-        """Intelligently suggest a category based on event details"""
-        text = f"{event_name} {description} {location}".lower()
+    def suggest_category(self, place_name, description, location):
+        """Intelligently suggest a category based on place details"""
+        text = f"{place_name} {description} {location}".lower()
         
         # Main categories
         main_categories = {
@@ -1281,90 +1281,90 @@ class CustomEventsManager:
         
         return 'Other Activities'
     
-    def create_event(self, user_id, event_data):
-        """Add a new custom event with intelligent category suggestion"""
+    def create_place(self, user_id, place_data):
+        """Add a new custom place with intelligent category suggestion"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         try:
             # Get suggested category
             suggested_category = self.suggest_category(
-                event_data.get('event_name', ''),
-                event_data.get('description', ''),
-                event_data.get('location', '')
+                place_data.get('place_name', ''),
+                place_data.get('description', ''),
+                place_data.get('location', '')
             )
-            
-            event_type = event_data.get('event_type') or suggested_category
-            
+
+            place_type = place_data.get('place_type') or suggested_category
+
             cursor.execute('''
-                INSERT INTO custom_events 
-                (user_id, event_name, event_type, description, location, time, price, image_url)
+                INSERT INTO custom_places 
+                (user_id, place_name, place_type, description, location, time, price, image_url)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 user_id,
-                event_data.get('event_name'),
-                event_type,
-                event_data.get('description', ''),
-                event_data.get('location', ''),
-                event_data.get('time', ''),
-                event_data.get('price', ''),
-                event_data.get('image_url', '')
+                place_data.get('place_name'),
+                place_type,
+                place_data.get('description', ''),
+                place_data.get('location', ''),
+                place_data.get('time', ''),
+                place_data.get('price', ''),
+                place_data.get('image_url', '')
             ))
             
-            event_id = cursor.lastrowid
+            place_id = cursor.lastrowid
             conn.commit()
-            print(f"Created event: {event_data.get('event_name')} | Category: {event_type}")
+            print(f"Created place: {place_data.get('place_name')} | Category: {place_type}")
             
             return {
-                'event_id': event_id,
-                'suggested_category': event_type
+                'place_id': place_id,
+                'suggested_category': place_type
             }
             
         except Exception as e:
-            print(f"Error creating event: {e}")
+            print(f"Error creating place: {e}")
             return None
         finally:
             conn.close()
-    
-    def get_all_events(self, event_type=None, limit=50):
-        """Get all custom events, optionally filtered by type"""
+
+    def get_all_places(self, place_type=None, limit=50):
+        """Get all custom places, optionally filtered by type"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
-        if event_type:
+
+        if place_type:
             cursor.execute('''
-                SELECT e.*, p.times_added, p.last_added
-                FROM custom_events e
-                LEFT JOIN custom_event_popularity p ON e.id = p.event_id
-                WHERE e.event_type = ? AND e.is_approved = 1
-                ORDER BY p.times_added DESC, e.created_at DESC
+                SELECT p.*, pop.times_added, pop.last_added
+                FROM custom_places p
+                LEFT JOIN custom_place_popularity pop ON p.id = pop.place_id
+                WHERE p.place_type = ? AND p.is_approved = 1
+                ORDER BY pop.times_added DESC, p.created_at DESC
                 LIMIT ?
-            ''', (event_type, limit))
+            ''', (place_type, limit))
         else:
             cursor.execute('''
-                SELECT e.*, p.times_added, p.last_added
-                FROM custom_events e
-                LEFT JOIN custom_event_popularity p ON e.id = p.event_id
-                WHERE e.is_approved = 1
-                ORDER BY p.times_added DESC, e.created_at DESC
+                SELECT p.*, pop.times_added, pop.last_added
+                FROM custom_places p
+                LEFT JOIN custom_place_popularity pop ON p.id = pop.place_id
+                WHERE p.is_approved = 1
+                ORDER BY pop.times_added DESC, p.created_at DESC
                 LIMIT ?
             ''', (limit,))
-        
-        columns = ['id', 'user_id', 'event_name', 'event_type', 'description', 
-                   'location', 'time', 'price', 'image_url', 'created_at', 
+
+        columns = ['id', 'user_id', 'place_name', 'place_type', 'description',
+                   'location', 'time', 'price', 'image_url', 'created_at',
                    'is_approved', 'times_added', 'last_added']
         
-        events = []
+        places = []
         for row in cursor.fetchall():
-            event = dict(zip(columns, row))
-            event['times_added'] = event.get('times_added') or 0
-            events.append(event)
+            place = dict(zip(columns, row))
+            place['times_added'] = place.get('times_added') or 0
+            places.append(place)
         
         conn.close()
-        return events
+        return places
     
-    def add_to_itinerary(self, user_id, event_id):
-        """Add a custom event to user's itinerary"""
+    def add_to_itinerary(self, user_id, place_id):
+        """Add a custom place to user's itinerary"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -1372,17 +1372,17 @@ class CustomEventsManager:
             current_time = datetime.now().isoformat()
             
             cursor.execute('''
-                INSERT INTO itinerary_custom_events (user_id, event_id, added_at)
+                INSERT INTO itinerary_custom_places (user_id, place_id, added_at)
                 VALUES (?, ?, ?)
-            ''', (user_id, event_id, current_time))
+            ''', (user_id, place_id, current_time))
             
             cursor.execute('''
-                INSERT INTO custom_event_popularity (event_id, times_added, last_added)
+                INSERT INTO custom_place_popularity (place_id, times_added, last_added)
                 VALUES (?, 1, ?)
-                ON CONFLICT(event_id) DO UPDATE SET
+                ON CONFLICT(place_id) DO UPDATE SET
                     times_added = times_added + 1,
                     last_added = ?
-            ''', (event_id, current_time, current_time))
+            ''', (place_id, current_time, current_time))
             
             conn.commit()
             return True
@@ -1393,32 +1393,32 @@ class CustomEventsManager:
         finally:
             conn.close()
     
-    def get_user_custom_events(self, user_id):
-        """Get all custom events in a user's itinerary"""
+    def get_user_custom_places(self, user_id):
+        """Get all custom places in a user's itinerary"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT e.*, i.added_at
-            FROM custom_events e
-            JOIN itinerary_custom_events i ON e.id = i.event_id
+            SELECT p.*, i.added_at
+            FROM custom_places p
+            JOIN itinerary_custom_places i ON p.id = i.place_id
             WHERE i.user_id = ?
             ORDER BY i.added_at DESC
         ''', (user_id,))
         
-        columns = ['id', 'user_id', 'event_name', 'event_type', 'description', 
+        columns = ['id', 'user_id', 'place_name', 'place_type', 'description', 
                    'location', 'time', 'price', 'image_url', 'created_at', 
                    'is_approved', 'added_at']
         
-        events = []
+        places = []
         for row in cursor.fetchall():
-            events.append(dict(zip(columns, row)))
+            places.append(dict(zip(columns, row)))
         
         conn.close()
-        return events
+        return places
 
-# Create custom events manager instance
-custom_events_manager = CustomEventsManager()
+# Create custom places manager instance
+custom_places_manager = CustomPlacesManager()
 
 # ============================================================================
 # BROADWAY SCRAPER API ENDPOINTS
