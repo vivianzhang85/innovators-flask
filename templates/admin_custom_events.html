@@ -380,7 +380,7 @@
             
             <div class="btn-group">
                 <button class="btn" onclick="openAddModal()">➕ Add New Event</button>
-                <button class="btn" onclick="loadEvents()">🔄 Refresh</button>
+                <button class="btn" onclick="loadEvents()"> Refresh</button>
             </div>
             
             <div class="form-group">
@@ -471,7 +471,7 @@
                 </div>
 
                 <div class="modal-actions">
-                    <button type="submit" class="btn">💾 Save Event</button>
+                    <button type="submit" class="btn"> Save Event</button>
                     <button type="button" class="btn btn-close" onclick="closeModal()">❌ Cancel</button>
                 </div>
             </form>
@@ -521,21 +521,21 @@
                         <td>${event.location || '-'}</td>
                         <td>${event.time || '-'}</td>
                         <td>${event.price || '-'}</td>
-                        <td><span class="popularity">⭐ ${event.times_added || 0}</span></td>
+                        <td><span class="popularity"> ${event.times_added || 0}</span></td>
                         <td>${new Date(event.created_at).toLocaleDateString()}</td>
                         <td>
                             <div class="action-buttons">
                                 ${!event.is_approved ? `
                                     <button class="btn btn-approve btn-small" onclick="approveEvent(${event.id}, true)">
-                                        ✅ Approve
+                                         Approve
                                     </button>
                                 ` : `
                                     <button class="btn btn-unapprove btn-small" onclick="approveEvent(${event.id}, false)">
-                                        ⏸️ Hide
+                                         Hide
                                     </button>
                                 `}
                                 <button class="btn btn-danger btn-small" onclick="deleteEvent(${event.id}, '${event.event_name.replace(/'/g, "\\'")}')">
-                                    🗑️ Delete
+                                     Delete
                                 </button>
                             </div>
                         </td>
