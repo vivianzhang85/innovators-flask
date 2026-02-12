@@ -2,7 +2,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Manage Events</title>
+    <title>Admin - Manage Custom Events</title>
     <style>
         * {
             margin: 0;
@@ -18,7 +18,7 @@
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
         }
 
@@ -31,7 +31,17 @@
         h1 {
             font-size: 2.5em;
             margin-bottom: 10px;
-            color: #ffd700;
+        }
+
+        .admin-badge {
+            background: #f44336;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            display: inline-block;
+            margin-top: 10px;
         }
 
         .tabs {
@@ -39,6 +49,7 @@
             gap: 10px;
             margin-bottom: 30px;
             justify-content: center;
+            flex-wrap: wrap;
         }
 
         .tab {
@@ -54,6 +65,7 @@
         .tab:hover, .tab.active {
             background: #ffd700;
             color: #1a2332;
+            transform: translateY(-2px);
         }
 
         .section {
@@ -95,9 +107,21 @@
             font-size: 1em;
         }
 
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+        }
+
         textarea {
             min-height: 100px;
             resize: vertical;
+        }
+
+        small {
+            color: #aaa;
+            font-size: 0.85em;
+            display: block;
+            margin-top: 5px;
         }
 
         .btn {
@@ -128,10 +152,18 @@
             font-size: 0.9em;
         }
 
+        .btn-cancel {
+            background: #555;
+            color: white;
+        }
+
         .events-table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            overflow: hidden;
         }
 
         .events-table th,
@@ -143,13 +175,13 @@
         }
 
         .events-table th {
-            background: #2a2a2a;
+            background: #1a1a1a;
             color: #ffd700;
             font-weight: bold;
         }
 
         .events-table tr:hover {
-            background: #2a2a2a;
+            background: #333;
         }
 
         .message {
@@ -170,13 +202,49 @@
             color: white;
         }
 
-        .admin-badge {
-            background: #f44336;
-            color: white;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.9em;
-            font-weight: bold;
+        .loading {
+            text-align: center;
+            color: #ffd700;
+            padding: 40px;
+            font-size: 1.2em;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #888;
+            padding: 60px 20px;
+        }
+
+        .empty-state-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+
+            .tabs {
+                flex-direction: column;
+            }
+
+            .tab {
+                width: 100%;
+            }
+
+            .section {
+                padding: 20px;
+            }
+
+            .events-table {
+                font-size: 0.85em;
+            }
+
+            .btn {
+                width: 100%;
+                margin-bottom: 10px;
+            }
         }
     </style>
 </head>
@@ -185,6 +253,7 @@
         <header>
             <h1>🔐 Admin - Manage Custom Events</h1>
             <span class="admin-badge">ADMIN ONLY</span>
+            <p style="color: #ccc; margin-top: 15px;">Create, edit, and delete custom NYC events</p>
         </header>
 
         <div class="tabs">
@@ -251,7 +320,7 @@
                 </div>
 
                 <button type="submit" class="btn" id="submit-btn">Create Event</button>
-                <button type="button" class="btn" onclick="cancelEdit()" id="cancel-btn" style="display:none;">Cancel</button>
+                <button type="button" class="btn btn-cancel" onclick="cancelEdit()" id="cancel-btn" style="display:none;">Cancel</button>
             </form>
         </div>
 
@@ -260,28 +329,33 @@
             <h2>Manage Existing Events</h2>
             <div id="manage-message"></div>
             
-            <table class="events-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Name</th>
-                        <th>Category</th>
-                        <th>Location</th>
-                        <th>Price</th>
-                        <th>Times Added</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="events-table-body">
-                    <tr><td colspan="7" style="text-align:center;">Loading events...</td></tr>
-                </tbody>
-            </table>
+            <div style="overflow-x: auto;">
+                <table class="events-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Category</th>
+                            <th>Location</th>
+                            <th>Price</th>
+                            <th>Times Added</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="events-table-body">
+                        <tr><td colspan="7" class="loading">Loading events...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
     <script>
         const API_URL = window.location.origin;
         const ADMIN_USER_ID = 'admin_user';
+
+        console.log('Admin page loaded');
+        console.log('API URL:', API_URL);
 
         function switchTab(tab, element) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -313,6 +387,8 @@
                 image_url: document.getElementById('image-url').value
             };
             
+            console.log('Submitting event:', eventData);
+            
             try {
                 let url = `${API_URL}/api/events/custom`;
                 let method = 'POST';
@@ -329,6 +405,7 @@
                 });
                 
                 const data = await response.json();
+                console.log('Response:', data);
                 
                 if (data.success) {
                     showMessage('create-message', 
@@ -347,16 +424,19 @@
                     showMessage('create-message', '❌ Error: ' + data.message, 'error');
                 }
             } catch (error) {
-                showMessage('create-message', '❌ Failed to save event', 'error');
                 console.error('Error:', error);
+                showMessage('create-message', '❌ Failed to save event', 'error');
             }
         });
 
         // Load all events for management
         async function loadAllEvents() {
+            console.log('Loading all events...');
             try {
                 const response = await fetch(`${API_URL}/api/events/custom?limit=1000`);
                 const data = await response.json();
+                
+                console.log('Events loaded:', data);
                 
                 if (data.success) {
                     displayEventsTable(data.events);
@@ -364,8 +444,8 @@
                     showMessage('manage-message', '❌ Error loading events', 'error');
                 }
             } catch (error) {
+                console.error('Error loading events:', error);
                 showMessage('manage-message', '❌ Failed to load events', 'error');
-                console.error('Error:', error);
             }
         }
 
@@ -373,7 +453,7 @@
             const tbody = document.getElementById('events-table-body');
             
             if (events.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No events found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 40px;">No events found</td></tr>';
                 return;
             }
             
@@ -394,9 +474,12 @@
         }
 
         async function editEvent(eventId) {
+            console.log('Editing event:', eventId);
             try {
                 const response = await fetch(`${API_URL}/api/events/custom/${eventId}`);
                 const data = await response.json();
+                
+                console.log('Event data:', data);
                 
                 if (data.success) {
                     const event = data.event;
@@ -424,8 +507,8 @@
                     alert('Error loading event details');
                 }
             } catch (error) {
-                alert('Failed to load event');
                 console.error('Error:', error);
+                alert('Failed to load event');
             }
         }
 
@@ -434,12 +517,15 @@
                 return;
             }
             
+            console.log('Deleting event:', eventId);
+            
             try {
                 const response = await fetch(`${API_URL}/api/events/custom/${eventId}`, {
                     method: 'DELETE'
                 });
                 
                 const data = await response.json();
+                console.log('Delete response:', data);
                 
                 if (data.success) {
                     showMessage('manage-message', `✅ Event "${eventName}" deleted successfully`, 'success');
@@ -448,8 +534,8 @@
                     showMessage('manage-message', '❌ Error: ' + data.message, 'error');
                 }
             } catch (error) {
-                showMessage('manage-message', '❌ Failed to delete event', 'error');
                 console.error('Error:', error);
+                showMessage('manage-message', '❌ Failed to delete event', 'error');
             }
         }
 
