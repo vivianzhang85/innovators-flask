@@ -2,7 +2,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Manage Custom Events</title>
+    <title>Admin - Manage Custom Places</title>
     <style>
         * {
             margin: 0;
@@ -117,13 +117,6 @@
             resize: vertical;
         }
 
-        small {
-            color: #aaa;
-            font-size: 0.85em;
-            display: block;
-            margin-top: 5px;
-        }
-
         .btn {
             background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
             color: #1a2332;
@@ -157,7 +150,7 @@
             color: white;
         }
 
-        .events-table {
+        .places-table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
@@ -166,21 +159,21 @@
             overflow: hidden;
         }
 
-        .events-table th,
-        .events-table td {
+        .places-table th,
+        .places-table td {
             padding: 12px;
             text-align: left;
             border-bottom: 1px solid #444;
             color: #ccc;
         }
 
-        .events-table th {
+        .places-table th {
             background: #1a1a1a;
             color: #ffd700;
             font-weight: bold;
         }
 
-        .events-table tr:hover {
+        .places-table tr:hover {
             background: #333;
         }
 
@@ -202,24 +195,6 @@
             color: white;
         }
 
-        .loading {
-            text-align: center;
-            color: #ffd700;
-            padding: 40px;
-            font-size: 1.2em;
-        }
-
-        .empty-state {
-            text-align: center;
-            color: #888;
-            padding: 60px 20px;
-        }
-
-        .empty-state-icon {
-            font-size: 4em;
-            margin-bottom: 20px;
-        }
-
         @media (max-width: 768px) {
             h1 {
                 font-size: 2em;
@@ -237,7 +212,7 @@
                 padding: 20px;
             }
 
-            .events-table {
+            .places-table {
                 font-size: 0.85em;
             }
 
@@ -251,32 +226,32 @@
 <body>
     <div class="container">
         <header>
-            <h1>🔐 Admin - Manage Custom Events</h1>
+            <h1>🔐 Admin - Manage Custom Places</h1>
             <span class="admin-badge">ADMIN ONLY</span>
-            <p style="color: #ccc; margin-top: 15px;">Create, edit, and delete custom NYC events</p>
+            <p style="color: #ccc; margin-top: 15px;">Create, edit, and delete custom NYC places</p>
         </header>
 
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('create', this)">Create Event</button>
-            <button class="tab" onclick="switchTab('manage', this)">Manage Events</button>
+            <button class="tab active" onclick="switchTab('create', this)">Create Place</button>
+            <button class="tab" onclick="switchTab('manage', this)">Manage Places</button>
         </div>
 
-        <!-- CREATE EVENT SECTION -->
+        <!-- CREATE PLACE SECTION -->
         <div id="create-section" class="section active">
-            <h2>Create New Event</h2>
+            <h2>Create New Place</h2>
             <div id="create-message"></div>
             
-            <form id="create-event-form">
-                <input type="hidden" id="edit-event-id" value="">
+            <form id="create-place-form">
+                <input type="hidden" id="edit-place-id" value="">
                 
                 <div class="form-group">
-                    <label for="event-name">Event Name *</label>
-                    <input type="text" id="event-name" required placeholder="e.g., Central Park Carriage Ride">
+                    <label for="place-name">Place Name *</label>
+                    <input type="text" id="place-name" required placeholder="e.g., Central Park Carriage Ride">
                 </div>
 
                 <div class="form-group">
-                    <label for="event-type">Category *</label>
-                    <select id="event-type" required>
+                    <label for="place-type">Category *</label>
+                    <select id="place-type" required>
                         <option value="">Select category...</option>
                         <option value="Breakfast">Breakfast</option>
                         <option value="Shopping">Shopping</option>
@@ -296,7 +271,7 @@
 
                 <div class="form-group">
                     <label for="description">Description</label>
-                    <textarea id="description" placeholder="Describe the event..."></textarea>
+                    <textarea id="description" placeholder="Describe the place..."></textarea>
                 </div>
 
                 <div class="form-group">
@@ -319,17 +294,18 @@
                     <input type="url" id="image-url" placeholder="https://example.com/image.jpg">
                 </div>
 
-                <button type="submit" class="btn" id="submit-btn">Create Event</button>
+                <button type="submit" class="btn" id="submit-btn">Create Place</button>
                 <button type="button" class="btn btn-cancel" onclick="cancelEdit()" id="cancel-btn" style="display:none;">Cancel</button>
             </form>
         </div>
 
+        <!-- MANAGE PLACES SECTION -->
         <div id="manage-section" class="section">
-            <h2>Manage Existing Events</h2>
+            <h2>Manage Existing Places</h2>
             <div id="manage-message"></div>
             
             <div style="overflow-x: auto;">
-                <table class="events-table">
+                <table class="places-table">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -341,8 +317,8 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="events-table-body">
-                        <tr><td colspan="7" class="loading">Loading events...</td></tr>
+                    <tbody id="places-table-body">
+                        <tr><td colspan="7" style="text-align:center; padding: 40px;">Loading places...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -353,9 +329,6 @@
         const API_URL = window.location.origin;
         const ADMIN_USER_ID = 'admin_user';
 
-        console.log('Admin page loaded');
-        console.log('API URL:', API_URL);
-
         function switchTab(tab, element) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             element.classList.add('active');
@@ -364,21 +337,21 @@
             document.getElementById(`${tab}-section`).classList.add('active');
             
             if (tab === 'manage') {
-                loadAllEvents();
+                loadAllPlaces();
             }
         }
 
-        // Create/Update event
-        document.getElementById('create-event-form').addEventListener('submit', async (e) => {
+        // Create/Update place
+        document.getElementById('create-place-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const eventId = document.getElementById('edit-event-id').value;
-            const isEditing = eventId !== '';
+            const placeId = document.getElementById('edit-place-id').value;
+            const isEditing = placeId !== '';
             
-            const eventData = {
+            const placeData = {
                 user_id: ADMIN_USER_ID,
-                event_name: document.getElementById('event-name').value,
-                event_type: document.getElementById('event-type').value,
+                place_name: document.getElementById('place-name').value,
+                place_type: document.getElementById('place-type').value,
                 description: document.getElementById('description').value,
                 location: document.getElementById('location').value,
                 time: document.getElementById('time').value,
@@ -386,162 +359,144 @@
                 image_url: document.getElementById('image-url').value
             };
             
-            console.log('Submitting event:', eventData);
-            
             try {
-                let url = `${API_URL}/api/events/custom`;
+                let url = `${API_URL}/api/places/custom`;
                 let method = 'POST';
                 
                 if (isEditing) {
-                    url = `${API_URL}/api/events/custom/${eventId}`;
+                    url = `${API_URL}/api/places/custom/${placeId}`;
                     method = 'PUT';
                 }
                 
                 const response = await fetch(url, {
                     method: method,
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(eventData)
+                    body: JSON.stringify(placeData)
                 });
                 
                 const data = await response.json();
-                console.log('Response:', data);
                 
                 if (data.success) {
                     showMessage('create-message', 
-                        `✅ Event ${isEditing ? 'updated' : 'created'} successfully!`, 
+                        `✅ Place ${isEditing ? 'updated' : 'created'} successfully!`, 
                         'success');
-                    document.getElementById('create-event-form').reset();
-                    document.getElementById('edit-event-id').value = '';
-                    document.getElementById('submit-btn').textContent = 'Create Event';
+                    document.getElementById('create-place-form').reset();
+                    document.getElementById('edit-place-id').value = '';
+                    document.getElementById('submit-btn').textContent = 'Create Place';
                     document.getElementById('cancel-btn').style.display = 'none';
                     
-                    // Reload events list if on manage tab
                     if (document.getElementById('manage-section').classList.contains('active')) {
-                        loadAllEvents();
+                        loadAllPlaces();
                     }
                 } else {
                     showMessage('create-message', '❌ Error: ' + data.message, 'error');
                 }
             } catch (error) {
+                showMessage('create-message', '❌ Failed to save place', 'error');
                 console.error('Error:', error);
-                showMessage('create-message', '❌ Failed to save event', 'error');
             }
         });
 
-        // Load all events for management
-        async function loadAllEvents() {
-            console.log('Loading all events...');
+        // Load all places for management
+        async function loadAllPlaces() {
             try {
-                const response = await fetch(`${API_URL}/api/events/custom?limit=1000`);
+                const response = await fetch(`${API_URL}/api/places/custom?limit=1000`);
                 const data = await response.json();
                 
-                console.log('Events loaded:', data);
-                
                 if (data.success) {
-                    displayEventsTable(data.events);
+                    displayPlacesTable(data.places);
                 } else {
-                    showMessage('manage-message', '❌ Error loading events', 'error');
+                    showMessage('manage-message', '❌ Error loading places', 'error');
                 }
             } catch (error) {
-                console.error('Error loading events:', error);
-                showMessage('manage-message', '❌ Failed to load events', 'error');
+                showMessage('manage-message', '❌ Failed to load places', 'error');
+                console.error('Error:', error);
             }
         }
 
-        function displayEventsTable(events) {
-            const tbody = document.getElementById('events-table-body');
+        function displayPlacesTable(places) {
+            const tbody = document.getElementById('places-table-body');
             
-            if (events.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 40px;">No events found</td></tr>';
+            if (places.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 40px;">No places found</td></tr>';
                 return;
             }
             
-            tbody.innerHTML = events.map(event => `
+            tbody.innerHTML = places.map(place => `
                 <tr>
-                    <td>${event.id}</td>
-                    <td>${event.event_name}</td>
-                    <td>${event.event_type}</td>
-                    <td>${event.location || 'N/A'}</td>
-                    <td>${event.price || 'N/A'}</td>
-                    <td>${event.times_added || 0}</td>
+                    <td>${place.id}</td>
+                    <td>${place.place_name}</td>
+                    <td>${place.place_type}</td>
+                    <td>${place.location || 'N/A'}</td>
+                    <td>${place.price || 'N/A'}</td>
+                    <td>${place.times_added || 0}</td>
                     <td>
-                        <button class="btn btn-small" onclick="editEvent(${event.id})">Edit</button>
-                        <button class="btn btn-small btn-danger" onclick="deleteEvent(${event.id}, '${event.event_name.replace(/'/g, "\\'")}')">Delete</button>
+                        <button class="btn btn-small" onclick="editPlace(${place.id})">Edit</button>
+                        <button class="btn btn-small btn-danger" onclick="deletePlace(${place.id}, '${place.place_name.replace(/'/g, "\\'")}')">Delete</button>
                     </td>
                 </tr>
             `).join('');
         }
 
-        async function editEvent(eventId) {
-            console.log('Editing event:', eventId);
+        async function editPlace(placeId) {
             try {
-                const response = await fetch(`${API_URL}/api/events/custom/${eventId}`);
+                const response = await fetch(`${API_URL}/api/places/custom/${placeId}`);
                 const data = await response.json();
                 
-                console.log('Event data:', data);
-                
                 if (data.success) {
-                    const event = data.event;
+                    const place = data.place;
                     
-                    // Fill form with event data
-                    document.getElementById('edit-event-id').value = event.id;
-                    document.getElementById('event-name').value = event.event_name;
-                    document.getElementById('event-type').value = event.event_type;
-                    document.getElementById('description').value = event.description || '';
-                    document.getElementById('location').value = event.location || '';
-                    document.getElementById('time').value = event.time || '';
-                    document.getElementById('price').value = event.price || '';
-                    document.getElementById('image-url').value = event.image_url || '';
+                    document.getElementById('edit-place-id').value = place.id;
+                    document.getElementById('place-name').value = place.place_name;
+                    document.getElementById('place-type').value = place.place_type;
+                    document.getElementById('description').value = place.description || '';
+                    document.getElementById('location').value = place.location || '';
+                    document.getElementById('time').value = place.time || '';
+                    document.getElementById('price').value = place.price || '';
+                    document.getElementById('image-url').value = place.image_url || '';
                     
-                    // Change button text
-                    document.getElementById('submit-btn').textContent = 'Update Event';
+                    document.getElementById('submit-btn').textContent = 'Update Place';
                     document.getElementById('cancel-btn').style.display = 'inline-block';
                     
-                    // Switch to create tab
                     switchTab('create', document.querySelectorAll('.tab')[0]);
-                    
-                    // Scroll to top
                     window.scrollTo(0, 0);
                 } else {
-                    alert('Error loading event details');
+                    alert('Error loading place details');
                 }
             } catch (error) {
+                alert('Failed to load place');
                 console.error('Error:', error);
-                alert('Failed to load event');
             }
         }
 
-        async function deleteEvent(eventId, eventName) {
-            if (!confirm(`Are you sure you want to delete "${eventName}"?`)) {
+        async function deletePlace(placeId, placeName) {
+            if (!confirm(`Are you sure you want to delete "${placeName}"?`)) {
                 return;
             }
             
-            console.log('Deleting event:', eventId);
-            
             try {
-                const response = await fetch(`${API_URL}/api/events/custom/${eventId}`, {
+                const response = await fetch(`${API_URL}/api/places/custom/${placeId}`, {
                     method: 'DELETE'
                 });
                 
                 const data = await response.json();
-                console.log('Delete response:', data);
                 
                 if (data.success) {
-                    showMessage('manage-message', `✅ Event "${eventName}" deleted successfully`, 'success');
-                    loadAllEvents();
+                    showMessage('manage-message', `✅ Place "${placeName}" deleted successfully`, 'success');
+                    loadAllPlaces();
                 } else {
                     showMessage('manage-message', '❌ Error: ' + data.message, 'error');
                 }
             } catch (error) {
+                showMessage('manage-message', '❌ Failed to delete place', 'error');
                 console.error('Error:', error);
-                showMessage('manage-message', '❌ Failed to delete event', 'error');
             }
         }
 
         function cancelEdit() {
-            document.getElementById('create-event-form').reset();
-            document.getElementById('edit-event-id').value = '';
-            document.getElementById('submit-btn').textContent = 'Create Event';
+            document.getElementById('create-place-form').reset();
+            document.getElementById('edit-place-id').value = '';
+            document.getElementById('submit-btn').textContent = 'Create Place';
             document.getElementById('cancel-btn').style.display = 'none';
         }
 
@@ -551,8 +506,7 @@
             setTimeout(() => element.innerHTML = '', 5000);
         }
 
-        // Load events on page load if on manage tab
         if (document.getElementById('manage-section').classList.contains('active')) {
-            loadAllEvents();
+            loadAllPlaces();
         }
     </script>

@@ -771,6 +771,236 @@ class BudgetTracker:
 budget_tracker = BudgetTracker()
 
 # ============================================================================
+# CUSTOM PLACES MANAGER CLASS
+# ============================================================================
+class CustomPlacesManager:
+    def __init__(self):
+        self.db_path = "custom_places.db"
+        self.init_database()
+    
+    def init_database(self):
+        """Create database for user-submitted custom places"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Custom places table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS custom_places (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                place_name TEXT NOT NULL,
+                place_type TEXT NOT NULL,
+                description TEXT,
+                location TEXT,
+                time TEXT,
+                price TEXT,
+                image_url TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_approved BOOLEAN DEFAULT 1
+            )
+        ''')
+        
+        # User itinerary custom places
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS itinerary_custom_places (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                place_id INTEGER,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (place_id) REFERENCES custom_places(id)
+            )
+        ''')
+        
+        # Place popularity tracking
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS custom_place_popularity (
+                place_id INTEGER PRIMARY KEY,
+                times_added INTEGER DEFAULT 0,
+                last_added TIMESTAMP,
+                FOREIGN KEY (place_id) REFERENCES custom_places(id)
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        print("Custom Places Database initialized")
+    
+    def suggest_category(self, place_name, description, location):
+        """Intelligently suggest a category based on place details"""
+        text = f"{place_name} {description} {location}".lower()
+        
+        # Main categories
+        main_categories = {
+            'Breakfast': ['breakfast', 'brunch', 'bagel', 'cafe', 'coffee', 'pancake', 'waffle', 'diner', 'eggs', 'pastry'],
+            'Shopping': ['shop', 'store', 'mall', 'boutique', 'market', 'clothing', 'fashion', 'retail'],
+            'Landmarks': ['museum', 'park', 'statue', 'bridge', 'building', 'monument', 'memorial', 'tower', 'square', 'liberty', 'empire state'],
+            'Broadway': ['broadway', 'show', 'theater', 'theatre', 'musical', 'play', 'performance', 'stage']
+        }
+        
+        # Check main categories first
+        for category, keywords in main_categories.items():
+            if any(keyword in text for keyword in keywords):
+                return category
+        
+        # Custom categories
+        custom_categories = {
+            'Scenery': ['carriage', 'ride', 'tour', 'sightseeing', 'view', 'scenic', 'observation'],
+            'Nightlife': ['bar', 'club', 'nightclub', 'lounge', 'cocktail', 'drinks'],
+            'Recreation': ['sports', 'game', 'basketball', 'baseball', 'gym', 'fitness'],
+            'Art & Culture': ['gallery', 'art', 'exhibition', 'culture', 'poetry', 'concert'],
+            'Family Activities': ['kids', 'children', 'family', 'playground', 'zoo', 'aquarium'],
+            'Food & Dining': ['lunch', 'dinner', 'restaurant', 'cuisine', 'pizza', 'sushi'],
+            'Entertainment': ['movie', 'cinema', 'comedy', 'magic', 'arcade'],
+            'Nature': ['garden', 'botanical', 'nature', 'beach', 'river', 'hiking'],
+            'Transportation': ['ferry', 'subway', 'train', 'taxi', 'bike', 'walk']
+        }
+        
+        for category, keywords in custom_categories.items():
+            if any(keyword in text for keyword in keywords):
+                return category
+        
+        return 'Other Activities'
+    
+    def create_place(self, user_id, place_data):
+        """Add a new custom place with intelligent category suggestion"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Get suggested category
+            suggested_category = self.suggest_category(
+                place_data.get('place_name', ''),
+                place_data.get('description', ''),
+                place_data.get('location', '')
+            )
+            
+            place_type = place_data.get('place_type') or suggested_category
+            
+            cursor.execute('''
+                INSERT INTO custom_places 
+                (user_id, place_name, place_type, description, location, time, price, image_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                user_id,
+                place_data.get('place_name'),
+                place_type,
+                place_data.get('description', ''),
+                place_data.get('location', ''),
+                place_data.get('time', ''),
+                place_data.get('price', ''),
+                place_data.get('image_url', '')
+            ))
+            
+            place_id = cursor.lastrowid
+            conn.commit()
+            print(f"Created place: {place_data.get('place_name')} | Category: {place_type}")
+            
+            return {
+                'place_id': place_id,
+                'suggested_category': place_type
+            }
+            
+        except Exception as e:
+            print(f"Error creating place: {e}")
+            return None
+        finally:
+            conn.close()
+    
+    def get_all_places(self, place_type=None, limit=50):
+        """Get all custom places, optionally filtered by type"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        if place_type:
+            cursor.execute('''
+                SELECT p.*, pop.times_added, pop.last_added
+                FROM custom_places p
+                LEFT JOIN custom_place_popularity pop ON p.id = pop.place_id
+                WHERE p.place_type = ? AND p.is_approved = 1
+                ORDER BY pop.times_added DESC, p.created_at DESC
+                LIMIT ?
+            ''', (place_type, limit))
+        else:
+            cursor.execute('''
+                SELECT p.*, pop.times_added, pop.last_added
+                FROM custom_places p
+                LEFT JOIN custom_place_popularity pop ON p.id = pop.place_id
+                WHERE p.is_approved = 1
+                ORDER BY pop.times_added DESC, p.created_at DESC
+                LIMIT ?
+            ''', (limit,))
+        
+        columns = ['id', 'user_id', 'place_name', 'place_type', 'description', 
+                   'location', 'time', 'price', 'image_url', 'created_at', 
+                   'is_approved', 'times_added', 'last_added']
+        
+        places = []
+        for row in cursor.fetchall():
+            place = dict(zip(columns, row))
+            place['times_added'] = place.get('times_added') or 0
+            places.append(place)
+        
+        conn.close()
+        return places
+    
+    def add_to_itinerary(self, user_id, place_id):
+        """Add a custom place to user's itinerary"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            current_time = datetime.now().isoformat()
+            
+            cursor.execute('''
+                INSERT INTO itinerary_custom_places (user_id, place_id, added_at)
+                VALUES (?, ?, ?)
+            ''', (user_id, place_id, current_time))
+            
+            cursor.execute('''
+                INSERT INTO custom_place_popularity (place_id, times_added, last_added)
+                VALUES (?, 1, ?)
+                ON CONFLICT(place_id) DO UPDATE SET
+                    times_added = times_added + 1,
+                    last_added = ?
+            ''', (place_id, current_time, current_time))
+            
+            conn.commit()
+            return True
+            
+        except Exception as e:
+            print(f"Error adding to itinerary: {e}")
+            return False
+        finally:
+            conn.close()
+    
+    def get_user_custom_places(self, user_id):
+        """Get all custom places in a user's itinerary"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT p.*, i.added_at
+            FROM custom_places p
+            JOIN itinerary_custom_places i ON p.id = i.place_id
+            WHERE i.user_id = ?
+            ORDER BY i.added_at DESC
+        ''', (user_id,))
+        
+        columns = ['id', 'user_id', 'place_name', 'place_type', 'description', 
+                   'location', 'time', 'price', 'image_url', 'created_at', 
+                   'is_approved', 'added_at']
+        
+        places = []
+        for row in cursor.fetchall():
+            places.append(dict(zip(columns, row)))
+        
+        conn.close()
+        return places
+
+# Create custom places manager instance
+custom_places_manager = CustomPlacesManager()
+
+# ============================================================================
 # ORIGINAL MUSEUM SCRAPER CLASS (unchanged)
 # ============================================================================
 
@@ -3199,6 +3429,207 @@ def test_itinerary_api():
         },
         'sections': ['trip_info', 'breakfast', 'landmarks', 'shopping', 'broadway']
     })
+
+# ============================================================================
+# CUSTOM PLACES API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/places/custom', methods=['POST'])
+def create_custom_place():
+    """Create a new custom place"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        
+        if not user_id or not data.get('place_name'):
+            return jsonify({
+                'success': False,
+                'message': 'user_id and place_name are required'
+            }), 400
+        
+        result = custom_places_manager.create_place(user_id, data)
+        
+        if result:
+            return jsonify({
+                'success': True,
+                'message': 'Place created successfully',
+                'place_id': result['place_id'],
+                'suggested_category': result['suggested_category']
+            }), 201
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to create place'
+            }), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/places/custom', methods=['GET'])
+def get_custom_places():
+    """Get all custom places or filter by type"""
+    try:
+        place_type = request.args.get('type')
+        limit = request.args.get('limit', 50, type=int)
+        
+        places = custom_places_manager.get_all_places(place_type, limit)
+        
+        return jsonify({
+            'success': True,
+            'count': len(places),
+            'places': places
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/places/suggest-category', methods=['POST'])
+def get_category_suggestion():
+    """Get category suggestion without creating place"""
+    try:
+        data = request.get_json()
+        
+        category = custom_places_manager.suggest_category(
+            data.get('place_name', ''),
+            data.get('description', ''),
+            data.get('location', '')
+        )
+        
+        return jsonify({
+            'success': True,
+            'category': category
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/places/custom/<int:place_id>', methods=['GET'])
+def get_single_place(place_id):
+    """Get a single place by ID for editing"""
+    try:
+        conn = sqlite3.connect('custom_places.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, user_id, place_name, place_type, description, 
+                   location, time, price, image_url, created_at, is_approved
+            FROM custom_places 
+            WHERE id = ?
+        ''', (place_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            columns = ['id', 'user_id', 'place_name', 'place_type', 'description', 
+                       'location', 'time', 'price', 'image_url', 'created_at', 'is_approved']
+            place = dict(zip(columns, row))
+            
+            return jsonify({
+                'success': True,
+                'place': place
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Place not found'
+            }), 404
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/places/custom/<int:place_id>', methods=['PUT'])
+def update_place(place_id):
+    """Update an existing place"""
+    try:
+        data = request.get_json()
+        
+        conn = sqlite3.connect('custom_places.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE custom_places SET
+                place_name = ?,
+                place_type = ?,
+                description = ?,
+                location = ?,
+                time = ?,
+                price = ?,
+                image_url = ?
+            WHERE id = ?
+        ''', (
+            data.get('place_name'),
+            data.get('place_type'),
+            data.get('description', ''),
+            data.get('location', ''),
+            data.get('time', ''),
+            data.get('price', ''),
+            data.get('image_url', ''),
+            place_id
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Place updated successfully'
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+@app.route('/api/places/custom/<int:place_id>', methods=['DELETE'])
+def delete_place(place_id):
+    """Delete a place"""
+    try:
+        conn = sqlite3.connect('custom_places.db')
+        cursor = conn.cursor()
+        
+        # Delete from itinerary first (foreign key constraint)
+        cursor.execute('DELETE FROM itinerary_custom_places WHERE place_id = ?', (place_id,))
+        cursor.execute('DELETE FROM custom_place_popularity WHERE place_id = ?', (place_id,))
+        cursor.execute('DELETE FROM custom_places WHERE id = ?', (place_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Place deleted successfully'
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
+
+# ============================================================================
+# ADMIN PLACES PAGE
+# ============================================================================
+@app.route('/admin/places')
+@login_required
+def admin_places():
+    """Admin page for managing places"""
+    if current_user.role != 'Admin':
+        return redirect(url_for('index'))
+    return render_template('admin_places.html')
 
 # ============================================================================
 # ALL ORIGINAL FLASK ROUTES (unchanged)
