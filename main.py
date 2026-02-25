@@ -1001,6 +1001,118 @@ class CustomPlacesManager:
 custom_places_manager = CustomPlacesManager()
 
 # ============================================================================
+# MICROBLOG DATABASE
+# ============================================================================
+
+class MicroblogManager:
+    """Manage microblog posts"""
+    
+    def __init__(self, db_name='microblog.db'):
+        self.db_name = db_name
+        self.init_database()
+    
+    def init_database(self):
+        """Initialize microblog database"""
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS microblog_posts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                username TEXT,
+                content TEXT NOT NULL,
+                page_context TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                likes INTEGER DEFAULT 0
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+        print("✅ Microblog database initialized")
+    
+    def create_post(self, user_id, username, content, page_context=None):
+        """Create a new microblog post"""
+        try:
+            conn = sqlite3.connect(self.db_name)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                INSERT INTO microblog_posts (user_id, username, content, page_context)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, username, content, page_context))
+            
+            post_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+            
+            return {'success': True, 'post_id': post_id}
+        except Exception as e:
+            print(f"Error creating microblog post: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    def get_posts(self, page_context=None, limit=50):
+        """Get microblog posts"""
+        try:
+            conn = sqlite3.connect(self.db_name)
+            cursor = conn.cursor()
+            
+            if page_context:
+                cursor.execute('''
+                    SELECT id, user_id, username, content, page_context, created_at, likes
+                    FROM microblog_posts
+                    WHERE page_context = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                ''', (page_context, limit))
+            else:
+                cursor.execute('''
+                    SELECT id, user_id, username, content, page_context, created_at, likes
+                    FROM microblog_posts
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                ''', (limit,))
+            
+            posts = []
+            for row in cursor.fetchall():
+                posts.append({
+                    'id': row[0],
+                    'user_id': row[1],
+                    'username': row[2],
+                    'content': row[3],
+                    'page_context': row[4],
+                    'created_at': row[5],
+                    'likes': row[6]
+                })
+            
+            conn.close()
+            return {'success': True, 'posts': posts}
+        except Exception as e:
+            print(f"Error getting microblog posts: {e}")
+            return {'success': False, 'error': str(e), 'posts': []}
+    
+    def delete_post(self, post_id, user_id):
+        """Delete a microblog post"""
+        try:
+            conn = sqlite3.connect(self.db_name)
+            cursor = conn.cursor()
+            
+            cursor.execute('DELETE FROM microblog_posts WHERE id = ? AND user_id = ?', (post_id, user_id))
+            
+            deleted = cursor.rowcount > 0
+            conn.commit()
+            conn.close()
+            
+            return {'success': deleted}
+        except Exception as e:
+            print(f"Error deleting microblog post: {e}")
+            return {'success': False, 'error': str(e)}
+
+# Initialize microblog manager
+microblog_manager = MicroblogManager()
+
+# ============================================================================
 # ORIGINAL MUSEUM SCRAPER CLASS (unchanged)
 # ============================================================================
 
@@ -3810,6 +3922,49 @@ def delete_place(place_id):
             'message': f'Error: {str(e)}'
         }), 500
 
+@app.route('/api/places/events', methods=['GET'])
+def get_custom_places_events():
+    """Get events related to custom places for microblog"""
+    try:
+        conn = sqlite3.connect('custom_places.db')
+        cursor = conn.cursor()
+        
+        # Get recent custom places additions
+        cursor.execute('''
+            SELECT id, place_name, place_type, description, created_at
+            FROM custom_places
+            ORDER BY created_at DESC
+            LIMIT 50
+        ''')
+        
+        places = cursor.fetchall()
+        conn.close()
+        
+        # Convert to events format for microblog
+        events = []
+        for place in places:
+            events.append({
+                'id': place[0],
+                'title': f"New {place[2]} added: {place[1]}",
+                'description': place[3] or 'No description',
+                'timestamp': place[4],
+                'type': 'place_added',
+                'category': place[2]
+            })
+        
+        return jsonify({
+            'success': True,
+            'events': events
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting custom places events: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'events': []
+        }), 500
+
 # ============================================================================
 # CUSTOM PLACES API ALIASES (for /api/places)
 # ============================================================================
@@ -4889,6 +5044,56 @@ def generate_data():
     init_microblogs()
 
 app.cli.add_command(custom_cli)
+
+# ============================================================================
+# MICROBLOG API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/microblog/posts', methods=['GET'])
+def get_microblog_posts():
+    """Get microblog posts"""
+    page_context = request.args.get('page_context')
+    limit = int(request.args.get('limit', 50))
+    
+    result = microblog_manager.get_posts(page_context=page_context, limit=limit)
+    return jsonify(result)
+
+@app.route('/api/microblog/posts', methods=['POST'])
+def create_microblog_post():
+    """Create a new microblog post"""
+    data = request.get_json()
+    
+    # Get user info
+    if current_user.is_authenticated:
+        user_id = current_user.id
+        username = current_user.username
+    else:
+        user_id = None
+        username = data.get('username', 'Anonymous')
+    
+    content = data.get('content')
+    page_context = data.get('page_context')
+    
+    if not content:
+        return jsonify({'success': False, 'error': 'Content is required'}), 400
+    
+    result = microblog_manager.create_post(
+        user_id=user_id,
+        username=username,
+        content=content,
+        page_context=page_context
+    )
+    
+    return jsonify(result)
+
+@app.route('/api/microblog/posts/<int:post_id>', methods=['DELETE'])
+def delete_microblog_post(post_id):
+    """Delete a microblog post"""
+    if not current_user.is_authenticated:
+        return jsonify({'success': False, 'error': 'Must be logged in'}), 401
+    
+    result = microblog_manager.delete_post(post_id, current_user.id)
+    return jsonify(result)
 
 # ============================================================================
 # MAIN ENTRY POINT
