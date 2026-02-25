@@ -157,6 +157,7 @@ class User(db.Model, UserMixin):
     _ap_exam = db.Column(db.JSON, unique=False, nullable=True)
     _class = db.Column(db.JSON, unique=False, nullable=True)
     _school = db.Column(db.String(255), default="Unknown", nullable=True)
+    _bio = db.Column(db.String(255), unique=False, nullable=True)
 
     # Define many-to-many relationship with Section model through UserSection table 
     # Overlaps setting avoids cicular dependencies with UserSection class
@@ -166,7 +167,7 @@ class User(db.Model, UserMixin):
     # Define one-to-one relationship with StockUser model
     stock_user = db.relationship("StockUser", backref=db.backref("users", cascade="all"), lazy=True, uselist=False)
 
-    def __init__(self, name, uid, password=app.config["DEFAULT_PASSWORD"], kasm_server_needed=False, role="User", pfp='', grade_data=None, ap_exam=None, school="Unknown", sid=None, classes=None):
+    def __init__(self, name, uid, password=app.config["DEFAULT_PASSWORD"], kasm_server_needed=False, role="User", pfp='', grade_data=None, ap_exam=None, school="Unknown", sid=None, bio=None, classes=None):
         self._name = name
         self._uid = uid
         self._email = "?"
@@ -181,6 +182,7 @@ class User(db.Model, UserMixin):
         # keep it as a JSON column in the DB
         self._class = classes if classes is not None else []
         self._school = school
+        self._bio = bio if bio is not None else ""
 
     # UserMixin/Flask-Login requires a get_id method to return the id as a string
     def get_id(self):
@@ -366,7 +368,8 @@ class User(db.Model, UserMixin):
             "grade_data": self.grade_data,
             "ap_exam": self.ap_exam,
             "password": self._password,  # Only for internal use, not for API
-            "school": self.school
+            "school": self.school,
+            "bio": self._bio
         }
         sections = self.read_sections()
         data.update(sections)
@@ -389,6 +392,7 @@ class User(db.Model, UserMixin):
         ap_exam = inputs.get("ap_exam", None)
         class_list = inputs.get("class", None) or inputs.get("_class", None)
         school = inputs.get("school", None)
+        bio = inputs.get("bio", None)
         # States before update
         old_uid = self.uid
         old_kasm_server_needed = self.kasm_server_needed
@@ -425,6 +429,8 @@ class User(db.Model, UserMixin):
         if not email:
             if email == "?":
                 self.set_email()
+        if bio is not None:
+            self._bio = bio
 
         # Make a KasmUser object to interact with the Kasm API
         kasm_user = KasmUser()
@@ -624,7 +630,8 @@ class User(db.Model, UserMixin):
         if self.stock_user:
             return self.stock_user.read()
         return None
-    
+
+  
 """Database Creation and Testing """
 
 # Builds working data set for testing

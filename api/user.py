@@ -118,6 +118,7 @@ class UserAPI:
                 'uid': uid,
                 'password': password,
                 'email': body.get('email'),
+                'bio': body.get('bio')
             }
             
             # Add optional fields if they exist
@@ -702,6 +703,7 @@ class UserAPI:
     api.add_resource(_GradeData, '/grade_data')
     api.add_resource(_APExam, '/apexam')
     api.add_resource(_School, '/school')
+    
     
     class _Class(Resource):
         """Manage the user's `class` list (e.g. CSSE, CSP, CSA).
