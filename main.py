@@ -1967,9 +1967,10 @@ class ItineraryStorage:
                 landmarks TEXT,
                 shopping TEXT,
                 broadway TEXT,
+                custom_places TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(user_id) ON CONFLICT REPLACE  -- One itinerary per user
+                UNIQUE(user_id) ON CONFLICT REPLACE
             )
         ''')
         
@@ -2069,7 +2070,7 @@ class ItineraryStorage:
             cursor = conn.cursor()
             
             query = '''
-                SELECT trip_info, breakfast, landmarks, shopping, broadway, created_at, updated_at
+                SELECT trip_info, breakfast, landmarks, shopping, broadway, custom_places, created_at, updated_at
                 FROM itinerary 
                 WHERE 1=1
             '''
@@ -2100,8 +2101,9 @@ class ItineraryStorage:
                     'landmarks': json.loads(row[2]) if row[2] else None,
                     'shopping': json.loads(row[3]) if row[3] else None,
                     'broadway': json.loads(row[4]) if row[4] else None,
-                    'created_at': row[5],
-                    'updated_at': row[6]
+                    'custom_places': json.loads(row[5]) if row[5] else [],
+                    'created_at': row[6],
+                    'updated_at': row[7]
                 }
                 
                 return {
@@ -2138,7 +2140,7 @@ class ItineraryStorage:
         """Update a specific section of the itinerary"""
         try:
             # Validate section name
-            valid_sections = ['trip_info', 'breakfast', 'landmarks', 'shopping', 'broadway']
+            valid_sections = ['trip_info', 'breakfast', 'landmarks', 'shopping', 'broadway', 'custom_places']
             if section_name not in valid_sections:
                 return {
                     'success': False,
@@ -3431,6 +3433,194 @@ def test_itinerary_api():
     })
 
 # ============================================================================
+# CUSTOM PLACES ITINERARY INTEGRATION
+# ============================================================================
+
+@app.route('/api/itinerary/custom-places/add', methods=['POST'])
+def add_custom_place_to_itinerary():
+    """Add a custom place to the itinerary"""
+    try:
+        # Get user ID if logged in
+        user_id = None
+        if current_user.is_authenticated:
+            user_id = current_user.id
+        
+        # Get session ID
+        session_id = request.cookies.get('itinerary_session_id')
+        if not session_id:
+            session_id = itinerary_storage.create_session()
+        
+        # Get place data from request
+        data = request.get_json()
+        place_id = data.get('place_id')
+        
+        if not place_id:
+            return jsonify({
+                'success': False,
+                'error': 'place_id is required'
+            }), 400
+        
+        # Get the place details
+        conn = sqlite3.connect('custom_places.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM custom_places WHERE id = ?', (place_id,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            return jsonify({
+                'success': False,
+                'error': 'Place not found'
+            }), 404
+        
+        # Convert to dict
+        columns = ['id', 'user_id', 'place_name', 'place_type', 'description', 
+                   'location', 'time', 'price', 'image_url', 'created_at', 'is_approved']
+        place = dict(zip(columns, row))
+        
+        # Get current itinerary
+        current_itinerary = itinerary_storage.get_itinerary(
+            session_id=session_id if not user_id else None,
+            user_id=user_id
+        )
+        
+        # Get existing custom places or create new list
+        custom_places = []
+        if current_itinerary['success'] and current_itinerary['data'].get('custom_places'):
+            custom_places = current_itinerary['data']['custom_places']
+            if isinstance(custom_places, str):
+                custom_places = json.loads(custom_places)
+        
+        # Check if already added
+        if any(p['id'] == place_id for p in custom_places):
+            return jsonify({
+                'success': False,
+                'error': 'Place already in itinerary'
+            }), 400
+        
+        # Add new place
+        custom_places.append(place)
+        
+        # Save to itinerary
+        result = itinerary_storage.update_section(
+            session_id=session_id if not user_id else None,
+            user_id=user_id,
+            section_name='custom_places',
+            section_data=custom_places
+        )
+        
+        if result['success']:
+            # Update popularity
+            custom_places_manager.add_to_itinerary(
+                session_id if not user_id else str(user_id),
+                place_id
+            )
+            
+            response = jsonify({
+                'success': True,
+                'message': f'{place["place_name"]} added to itinerary',
+                'place': place
+            })
+            response.set_cookie('itinerary_session_id', session_id, max_age=30*24*60*60)
+            return response
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        print(f"Error adding custom place to itinerary: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/itinerary/custom-places', methods=['GET'])
+def get_custom_places_from_itinerary():
+    """Get custom places from user's itinerary"""
+    try:
+        # Get user ID if logged in
+        user_id = None
+        if current_user.is_authenticated:
+            user_id = current_user.id
+        
+        # Get session ID
+        session_id = request.cookies.get('itinerary_session_id')
+        
+        # Get itinerary
+        result = itinerary_storage.get_itinerary(
+            session_id=session_id if not user_id else None,
+            user_id=user_id
+        )
+        
+        if result['success']:
+            custom_places = result['data'].get('custom_places', [])
+            if isinstance(custom_places, str):
+                custom_places = json.loads(custom_places) if custom_places else []
+            
+            return jsonify({
+                'success': True,
+                'places': custom_places or []
+            })
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/itinerary/custom-places/<int:place_id>', methods=['DELETE'])
+def remove_custom_place_from_itinerary(place_id):
+    """Remove a custom place from itinerary"""
+    try:
+        # Get user ID if logged in
+        user_id = None
+        if current_user.is_authenticated:
+            user_id = current_user.id
+        
+        # Get session ID
+        session_id = request.cookies.get('itinerary_session_id')
+        
+        # Get current itinerary
+        current_itinerary = itinerary_storage.get_itinerary(
+            session_id=session_id if not user_id else None,
+            user_id=user_id
+        )
+        
+        if not current_itinerary['success']:
+            return jsonify(current_itinerary), 500
+        
+        # Get custom places
+        custom_places = current_itinerary['data'].get('custom_places', [])
+        if isinstance(custom_places, str):
+            custom_places = json.loads(custom_places) if custom_places else []
+        
+        # Remove the place
+        custom_places = [p for p in custom_places if p['id'] != place_id]
+        
+        # Update itinerary
+        result = itinerary_storage.update_section(
+            session_id=session_id if not user_id else None,
+            user_id=user_id,
+            section_name='custom_places',
+            section_data=custom_places
+        )
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': 'Place removed from itinerary'
+            })
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# ============================================================================
 # CUSTOM PLACES API ENDPOINTS
 # ============================================================================
 
@@ -3619,6 +3809,40 @@ def delete_place(place_id):
             'success': False,
             'message': f'Error: {str(e)}'
         }), 500
+
+# ============================================================================
+# CUSTOM PLACES API ALIASES (for /api/places)
+# ============================================================================
+
+@app.route('/api/places', methods=['POST'])
+def create_custom_place_alias():
+    """Alias for /api/places/custom"""
+    return create_custom_place()
+
+@app.route('/api/places', methods=['GET'])
+def get_custom_places_alias():
+    """Alias for /api/places/custom"""
+    return get_custom_places()
+
+@app.route('/api/places/suggest-category', methods=['POST'])
+def get_category_suggestion_alias():
+    """Alias for category suggestion"""
+    return get_category_suggestion()
+
+@app.route('/api/places/<int:place_id>', methods=['GET'])
+def get_single_place_alias(place_id):
+    """Alias for getting single place"""
+    return get_single_place(place_id)
+
+@app.route('/api/places/<int:place_id>', methods=['PUT'])
+def update_place_alias(place_id):
+    """Alias for updating place"""
+    return update_place(place_id)
+
+@app.route('/api/places/<int:place_id>', methods=['DELETE'])
+def delete_place_alias(place_id):
+    """Alias for deleting place"""
+    return delete_place(place_id)
 
 # ============================================================================
 # ADMIN PLACES PAGE
